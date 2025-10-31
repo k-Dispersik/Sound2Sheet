@@ -1,5 +1,7 @@
 # Sound2Sheet
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 AI-powered music transcription system that converts piano audio recordings into structured musical notation.
 
 ## Version
@@ -52,5 +54,31 @@ This project follows Git Flow workflow:
 
 All code changes must include appropriate unit tests.
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+### Contribution Guidelines
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Write tests for your changes
+4. Ensure all tests pass (`pytest`)
+5. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+6. Push to the branch (`git push origin feature/AmazingFeature`)
+7. Open a Pull Request
+
 ## License
-MIT License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+### MIT License Summary
+
+- ✅ Commercial use allowed
+- ✅ Modification allowed
+- ✅ Distribution allowed
+- ✅ Private use allowed
+- ⚠️ No warranty provided
+- ⚠️ No liability accepted
+
+Copyright (c) 2025 Volodymyr
