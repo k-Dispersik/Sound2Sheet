@@ -8,31 +8,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Complete AudioProcessor implementation with librosa integration
-- Audio file loading support (.wav, .mp3) 
-- Audio normalization and pre-emphasis filtering
-- Audio resampling functionality  
-- Mel-spectrogram generation using librosa
-- Audio augmentation (pitch shift, time stretch, noise, volume)
-- Comprehensive unittest suite for audio processing
-- Configuration loading from YAML files
-- Initial project structure and Git Flow setup
-
-### Changed
-- Updated requirements.txt with librosa and soundfile dependencies
-- Enhanced project documentation
-
-### Deprecated
 - Nothing yet
 
-### Removed
+### Changed
 - Nothing yet
 
 ### Fixed
 - Nothing yet
 
-### Security
-- Nothing yet
+## [0.2.0] - 2025-10-31
+### Added
+- **Feature 1: Audio Processing (Complete)**
+  - AudioProcessor class with full audio pipeline implementation
+  - Multi-format audio support (.wav, .mp3, .m4a)
+  - Audio normalization with RMS-based algorithm
+  - Pre-emphasis filtering for signal enhancement
+  - Audio resampling to configurable sample rates
+  - Mel-spectrogram generation with librosa
+  - Audio augmentation suite:
+    - Pitch shifting (±N semitones)
+    - Time stretching (variable rates)
+    - Gaussian noise injection
+    - Volume adjustment
+  - AudioVisualizer class for visualization:
+    - Waveform plotting
+    - Mel-spectrogram visualization
+    - Augmentation comparison plots
+  - Comprehensive error handling:
+    - File format validation with header checks
+    - Corrupted file detection
+    - Memory usage estimation and OOM protection
+    - Extensive logging throughout pipeline
+  - Performance optimization:
+    - Dynamic n_fft adjustment for short audio
+    - Efficient soundfile backend for WAV files
+    - Memory-conscious processing
+  - Testing suite (48 tests, 100% passing):
+    - Unit tests for all AudioProcessor methods
+    - Integration tests for full pipeline
+    - Performance benchmarking tests
+    - Audio format and quality tests
+    - Visualization tests
+  - AudioConfig class for flexible configuration
+  - YAML-based configuration support
+
+### Changed
+- Updated requirements.txt with audio processing dependencies:
+  - librosa >= 0.10.0 for audio analysis
+  - soundfile for WAV file handling
+  - matplotlib and seaborn for visualization
+- Optimized audio loading to use soundfile for WAV files (avoiding deprecation warnings)
+
+### Fixed
+- All audioread deprecation warnings properly handled
+- librosa UserWarnings for n_fft parameter resolved
+- Test validation methods now create proper audio file headers
+- Memory estimation for large audio files
 
 ## [0.1.0-dev] - 2025-10-30
 ### Added
