@@ -9,6 +9,8 @@ from typing import Optional, Tuple, Union
 from pathlib import Path
 import numpy as np
 import yaml
+import librosa
+import soundfile as sf
 
 
 class AudioConfig:
@@ -104,13 +106,18 @@ class AudioProcessor:
         if not self.validate_audio_file(file_path):
             raise FileNotFoundError(f"Audio file not found or unsupported format: {file_path}")
         
-        # Placeholder implementation - will be completed with librosa
-        # For now, return a dummy audio array
-        duration = 5.0  # 5 seconds
-        num_samples = int(duration * self.config.sample_rate)
-        audio = np.random.randn(num_samples).astype(np.float32)
-        
-        return audio
+        try:
+            # Load audio using librosa with target sample rate and mono conversion
+            audio, sr = librosa.load(
+                str(file_path), 
+                sr=self.config.sample_rate, 
+                mono=True,
+                dtype=np.float32
+            )
+            return audio
+            
+        except Exception as e:
+            raise ValueError(f"Failed to load audio file {file_path}: {str(e)}")
     
     def normalize_audio(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -154,15 +161,103 @@ class AudioProcessor:
         
         return emphasized
     
-    def process_audio(self, file_path: Union[str, Path]) -> np.ndarray:
+    def resample_audio(self, audio: np.ndarray, current_sr: int, target_sr: int) -> np.ndarray:
+        """
+        Resample audio to target sample rate.
+        
+        Args:
+            audio: Input audio array
+            current_sr: Current sample rate
+            target_sr: Target sample rate
+            
+        Returns:
+            Resampled audio array
+        """
+        if current_sr == target_sr:
+            return audio
+            
+        return librosa.resample(audio, orig_sr=current_sr, target_sr=target_sr)
+    
+    def to_mel_spectrogram(self, audio: np.ndarray) -> np.ndarray:
+        """
+        Convert audio to mel-spectrogram.
+        
+        Args:
+            audio: Input audio array
+            
+        Returns:
+            Mel-spectrogram with shape (n_mels, time_frames)
+        """
+        # Apply pre-emphasis if configured
+        if self.config.pre_emphasis > 0:
+            audio = self.apply_pre_emphasis(audio)
+        
+        # Convert to mel-spectrogram
+        mel_spec = librosa.feature.melspectrogram(
+            y=audio,
+            sr=self.config.sample_rate,
+            n_fft=self.config.n_fft,
+            hop_length=self.config.hop_length,
+            n_mels=self.config.n_mels,
+            fmin=self.config.f_min,
+            fmax=self.config.f_max
+        )
+        
+        # Convert to log scale (dB)
+        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+        
+        return mel_spec_db
+    
+    def augment_audio(self, audio: np.ndarray, augment_type: str, **kwargs) -> np.ndarray:
+        """
+        Apply audio augmentation.
+        
+        Args:
+            audio: Input audio array
+            augment_type: Type of augmentation ('pitch_shift', 'time_stretch', 'noise', 'volume')
+            **kwargs: Additional parameters for specific augmentation types
+            
+        Returns:
+            Augmented audio array
+        """
+        if augment_type == "pitch_shift":
+            # Pitch shifting in semitones
+            n_steps = kwargs.get('n_steps', 0)  # Default: no shift
+            return librosa.effects.pitch_shift(
+                audio, 
+                sr=self.config.sample_rate, 
+                n_steps=n_steps
+            )
+            
+        elif augment_type == "time_stretch":
+            # Time stretching
+            rate = kwargs.get('rate', 1.0)  # Default: no stretch
+            return librosa.effects.time_stretch(audio, rate=rate)
+            
+        elif augment_type == "noise":
+            # Add Gaussian noise
+            noise_factor = kwargs.get('noise_factor', 0.005)
+            noise = np.random.normal(0, noise_factor, audio.shape).astype(np.float32)
+            return audio + noise
+            
+        elif augment_type == "volume":
+            # Volume adjustment
+            volume_factor = kwargs.get('volume_factor', 1.0)
+            return audio * volume_factor
+            
+        else:
+            raise ValueError(f"Unknown augmentation type: {augment_type}")
+    
+    def process_audio(self, file_path: Union[str, Path], return_spectrogram: bool = True) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Complete audio processing pipeline.
         
         Args:
             file_path: Path to audio file
+            return_spectrogram: If True, returns mel-spectrogram, else returns processed audio
             
         Returns:
-            Processed audio array
+            Processed audio array or mel-spectrogram, or both as tuple
         """
         # Load audio
         audio = self.load_audio(file_path)
@@ -170,7 +265,11 @@ class AudioProcessor:
         # Normalize
         audio = self.normalize_audio(audio)
         
-        # Apply pre-emphasis
-        audio = self.apply_pre_emphasis(audio)
-        
-        return audio
+        if return_spectrogram:
+            # Convert to mel-spectrogram
+            mel_spec = self.to_mel_spectrogram(audio)
+            return mel_spec
+        else:
+            # Return processed audio
+            audio = self.apply_pre_emphasis(audio)
+            return audio
