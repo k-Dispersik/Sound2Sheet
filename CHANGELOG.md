@@ -16,6 +16,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.4.0] - 2025-10-31
+### Added
+- **Feature 3: Model Training Pipeline (Complete)**
+  - Model architecture implementation:
+    - AST (Audio Spectrogram Transformer) encoder wrapper with freezing support
+    - Custom Transformer decoder for note prediction
+    - Positional encoding for sequence modeling
+    - End-to-end Sound2Sheet model
+  - Configuration system:
+    - ModelConfig for architecture parameters
+    - TrainingConfig for training hyperparameters
+    - InferenceConfig for generation settings
+    - DataConfig for dataset and audio processing
+  - Dataset pipeline:
+    - PianoDataset class for loading audio-MIDI pairs
+    - Custom collate function for variable-length sequences
+    - Audio augmentation in training mode
+    - Efficient dataloader creation
+  - Training infrastructure:
+    - Full training loop with teacher forcing
+    - Mixed precision training support (AMP)
+    - Gradient accumulation for large batch simulation
+    - Learning rate scheduling (linear, cosine, constant)
+    - Early stopping with patience
+    - Checkpoint management (best model + periodic saves)
+    - Training history logging (JSON format)
+  - Inference capabilities:
+    - Autoregressive generation
+    - Greedy decoding and beam search support
+    - Temperature-based sampling
+    - Top-k and nucleus (top-p) sampling
+  - CLI scripts:
+    - train.py for model training
+    - inference.py for audio-to-MIDI transcription
+  - Testing suite (95 tests, 100% passing):
+    - Configuration tests (34 tests)
+    - Dataset tests (18 tests)
+    - Model architecture tests (26 tests)
+    - Trainer tests (17 tests)
+    - Integration and edge case coverage
+  - Documentation:
+    - Comprehensive model README with usage examples
+    - Training and inference guides
+    - API documentation
+    - Model architecture description
+
+### Changed
+- Updated .gitignore to exclude logs/ directory
+- Added pytest configuration with markers (slow, unit, integration)
+- Updated requirements.txt with deep learning dependencies:
+  - torch >= 2.0.0
+  - transformers >= 4.30.0
+  - accelerate >= 0.20.0
+  - mido >= 1.3.0
+  - pytest and plugins for testing
+
+### Fixed
+- AST input shape handling (3D [batch, n_mels, time] without channel dimension)
+- Mel-spectrogram padding/truncation to AST max_length (1024 frames)
+- Decoder parameter order (encoder_hidden_states, target_notes)
+- PyTorch 2.6 compatibility (weights_only=False for torch.load)
+- Empty dataloader handling in trainer
+- Training history key naming consistency
+- ZeroDivisionError in checkpoint saving with empty loaders
+
 ## [0.3.0] - 2025-10-31
 ### Added
 - **Feature 2: Dataset Generation (Complete)**
