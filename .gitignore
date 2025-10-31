@@ -1,0 +1,19 @@
+# Sound2Sheet Project .gitignore
+
+# Specification and documentation
+spec/
+
+# Python
+__pycache__/
+
+# Environments
+.venv/
+
+# Data directories
+data/raw/
+data/processed/
+*.wav
+*.mp3
+
+# IDE
+.vscode/
