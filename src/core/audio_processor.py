@@ -14,6 +14,8 @@ import librosa
 import soundfile as sf
 import warnings
 
+from .noise_strategies import NoiseStrategyFactory
+
 
 class AudioConfig:
     """Configuration class for audio processing parameters."""
@@ -69,6 +71,7 @@ class AudioProcessor:
         """
         self.config = config or AudioConfig()
         self.logger = logging.getLogger(__name__)
+        self.noise_factory = NoiseStrategyFactory()
         
         # Configure logging if not already configured
         if not self.logger.handlers:
@@ -339,9 +342,23 @@ class AudioProcessor:
                 return librosa.effects.time_stretch(audio, rate=rate)
             
         elif augment_type == "noise":
-            # Add Gaussian noise
+            # Add various types of noise using Strategy pattern
+            noise_type = kwargs.get('noise_type', 'white')
             noise_factor = kwargs.get('noise_factor', 0.005)
-            noise = np.random.normal(0, noise_factor, audio.shape).astype(np.float32)
+            snr_db = kwargs.get('snr_db', None)  # Signal-to-Noise Ratio in dB
+            
+            # Get noise generation strategy
+            strategy = self.noise_factory.get_strategy(noise_type)
+            
+            # Generate noise using strategy
+            noise = strategy.generate(len(audio), self.config.sample_rate, **kwargs)
+            
+            # Apply scaling factor or SNR
+            if snr_db is not None:
+                noise = self._apply_snr(audio, noise, snr_db)
+            else:
+                noise = noise * noise_factor
+            
             return audio + noise
             
         elif augment_type == "volume":
@@ -465,3 +482,27 @@ class AudioProcessor:
         total_memory = (stft_memory + mel_memory) * 2
         
         return total_memory
+    
+    def _apply_snr(self, signal: np.ndarray, noise: np.ndarray, snr_db: float) -> np.ndarray:
+        """
+        Scale noise to achieve target Signal-to-Noise Ratio.
+        
+        Args:
+            signal: Clean signal
+            noise: Noise to be scaled
+            snr_db: Target SNR in decibels (higher = less noise)
+            
+        Returns:
+            Scaled noise array
+        """
+        # Calculate signal power
+        signal_power = np.mean(signal ** 2)
+        
+        # Calculate noise power
+        noise_power = np.mean(noise ** 2)
+        
+        # Calculate required noise scaling
+        snr_linear = 10 ** (snr_db / 10)
+        scale = np.sqrt(signal_power / (noise_power * snr_linear))
+        
+        return noise * scale
