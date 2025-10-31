@@ -16,6 +16,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.3.0] - 2025-10-31
+### Added
+- **Feature 2: Dataset Generation (Complete)**
+  - AudioSynthesizer class for synthetic piano audio generation
+  - MIDI-to-audio synthesis using soundfont (FluidSynth)
+  - Multiple soundfont support (piano, electric piano, harpsichord)
+  - Configurable synthesis parameters (sample rate, reverb, chorus)
+  - MIDI generation from note sequences
+  - DatasetGenerator class for automated dataset creation
+  - Support for MAESTRO and other MIDI datasets
+  - Train/validation/test split generation
+  - JSON manifest generation with metadata
+  - Batch processing with progress tracking
+  - Testing suite (29 tests, 100% passing):
+    - AudioSynthesizer tests (14 tests)
+    - DatasetGenerator tests (15 tests)
+    - Integration and validation tests
+  - Comprehensive error handling and logging
+  - Memory-efficient processing
+
+### Changed
+- Updated .gitignore patterns for data directories
+- Added FluidSynth and soundfont dependencies to requirements.txt
+
+### Fixed
+- Data directory pattern handling in .gitignore
+- MIDI file validation in dataset generation
+- Audio synthesis error handling
+
 ## [0.2.0] - 2025-10-31
 ### Added
 - **Feature 1: Audio Processing (Complete)**
