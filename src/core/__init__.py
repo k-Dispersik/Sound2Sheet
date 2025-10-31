@@ -6,8 +6,10 @@ and configuration management.
 """
 
 from .audio_processor import AudioProcessor, AudioConfig
+from .audio_visualizer import AudioVisualizer
 
 __all__ = [
     "AudioProcessor",
     "AudioConfig",
+    "AudioVisualizer",
 ]
