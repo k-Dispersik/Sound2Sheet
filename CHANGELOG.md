@@ -8,13 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial project structure
-- Git repository initialization
-- Basic configuration system
-- Project documentation
+- Complete AudioProcessor implementation with librosa integration
+- Audio file loading support (.wav, .mp3) 
+- Audio normalization and pre-emphasis filtering
+- Audio resampling functionality  
+- Mel-spectrogram generation using librosa
+- Audio augmentation (pitch shift, time stretch, noise, volume)
+- Comprehensive unittest suite for audio processing
+- Configuration loading from YAML files
+- Initial project structure and Git Flow setup
 
 ### Changed
-- Nothing yet
+- Updated requirements.txt with librosa and soundfile dependencies
+- Enhanced project documentation
 
 ### Deprecated
 - Nothing yet
