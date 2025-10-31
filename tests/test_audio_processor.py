@@ -79,6 +79,20 @@ class TestAudioProcessor(unittest.TestCase):
         """Test validation of valid WAV file."""
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             temp_path = Path(temp_file.name)
+            
+            # Create a minimal valid WAV file with proper header
+            import soundfile as sf
+            import numpy as np
+            
+            # Generate simple sine wave
+            sample_rate = 16000
+            duration = 0.1  # 100ms
+            t = np.linspace(0, duration, int(sample_rate * duration))
+            audio_data = 0.1 * np.sin(2 * np.pi * 440 * t)  # 440Hz sine wave
+            
+            # Write to WAV file
+            sf.write(str(temp_path), audio_data, sample_rate)
+            
             self.assertTrue(self.processor.validate_audio_file(temp_path))
             temp_path.unlink()
     
@@ -86,6 +100,16 @@ class TestAudioProcessor(unittest.TestCase):
         """Test validation of valid MP3 file."""
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
             temp_path = Path(temp_file.name)
+            
+            # Create a minimal MP3 file with valid ID3 header
+            # Write minimal ID3v2 header
+            with open(temp_path, 'wb') as f:
+                # ID3v2 header: ID3 + version (2.3) + flags + size
+                id3_header = b'ID3\x03\x00\x00\x00\x00\x00\x00'
+                # Add minimal MP3 frame header (sync + layer/version info)
+                mp3_frame = b'\xff\xfb\x90\x00' + b'\x00' * 100  # Basic frame structure
+                f.write(id3_header + mp3_frame)
+            
             self.assertTrue(self.processor.validate_audio_file(temp_path))
             temp_path.unlink()
     
@@ -93,6 +117,19 @@ class TestAudioProcessor(unittest.TestCase):
         """Test validation of valid M4A file."""
         with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as temp_file:
             temp_path = Path(temp_file.name)
+            
+            # Create a minimal M4A file with valid ftyp box
+            with open(temp_path, 'wb') as f:
+                # ftyp box: size (4 bytes) + type (4 bytes) + data
+                # Minimal ftyp box for M4A
+                ftyp_size = (20).to_bytes(4, 'big')  # 20 bytes total
+                ftyp_type = b'ftyp'
+                brand = b'M4A '  # Major brand
+                version = (0).to_bytes(4, 'big')  # Minor version
+                compatible = b'mp42'  # Compatible brand
+                
+                f.write(ftyp_size + ftyp_type + brand + version + compatible)
+            
             self.assertTrue(self.processor.validate_audio_file(temp_path))
             temp_path.unlink()
     

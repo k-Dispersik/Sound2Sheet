@@ -12,6 +12,7 @@ import numpy as np
 import yaml
 import librosa
 import soundfile as sf
+import warnings
 
 
 class AudioConfig:
@@ -140,13 +141,40 @@ class AudioProcessor:
         self.logger.info(f"Loading audio file: {file_path}")
         
         try:
-            # Load audio using librosa with target sample rate and mono conversion
-            audio, sr = librosa.load(
-                str(file_path), 
-                sr=self.config.sample_rate, 
-                mono=True,
-                dtype=np.float32
-            )
+            file_path = Path(file_path)
+            
+            # Use soundfile for WAV files to avoid audioread deprecation warnings
+            if file_path.suffix.lower() == '.wav':
+                audio_data, sample_rate = sf.read(str(file_path), dtype='float32')
+                
+                # Convert to mono if stereo
+                if audio_data.ndim > 1:
+                    audio_data = np.mean(audio_data, axis=1)
+                
+                # Resample if needed
+                if sample_rate != self.config.sample_rate:
+                    audio_data = librosa.resample(
+                        audio_data, 
+                        orig_sr=sample_rate, 
+                        target_sr=self.config.sample_rate
+                    )
+                
+                audio = audio_data.astype(np.float32)
+            else:
+                # Use librosa for MP3 and M4A files (requires audioread backend)
+                with warnings.catch_warnings():
+                    # Suppress specific audioread deprecation warnings
+                    warnings.filterwarnings("ignore", message=".*aifc.*deprecated.*")
+                    warnings.filterwarnings("ignore", message=".*audioop.*deprecated.*") 
+                    warnings.filterwarnings("ignore", message=".*sunau.*deprecated.*")
+                    
+                    audio, sr = librosa.load(
+                        str(file_path), 
+                        sr=self.config.sample_rate, 
+                        mono=True,
+                        dtype=np.float32
+                    )
+            
             self.logger.info(f"Successfully loaded audio: {len(audio)} samples, {len(audio)/self.config.sample_rate:.2f}s")
             return audio
             
@@ -235,21 +263,37 @@ class AudioProcessor:
             if self.config.pre_emphasis > 0:
                 audio = self.apply_pre_emphasis(audio)
             
-            # Convert to mel-spectrogram
-            mel_spec = librosa.feature.melspectrogram(
-                y=audio,
-                sr=self.config.sample_rate,
-                n_fft=self.config.n_fft,
-                hop_length=self.config.hop_length,
-                n_mels=self.config.n_mels,
-                fmin=self.config.f_min,
-                fmax=self.config.f_max
-            )
+            # Adjust n_fft for short audio to avoid warnings
+            n_fft = min(self.config.n_fft, len(audio))
+            # Ensure n_fft is even
+            if n_fft % 2 == 1:
+                n_fft -= 1
+            # Minimum n_fft should be at least 32
+            n_fft = max(n_fft, 32)
+            
+            # Adjust hop_length proportionally
+            hop_length = min(self.config.hop_length, n_fft // 4)
+            hop_length = max(hop_length, 1)
+            
+            # Convert to mel-spectrogram with adjusted parameters
+            with warnings.catch_warnings():
+                # Suppress UserWarning about n_fft being too large
+                warnings.filterwarnings("ignore", message=".*n_fft.*too large.*")
+                
+                mel_spec = librosa.feature.melspectrogram(
+                    y=audio,
+                    sr=self.config.sample_rate,
+                    n_fft=n_fft,
+                    hop_length=hop_length,
+                    n_mels=self.config.n_mels,
+                    fmin=self.config.f_min,
+                    fmax=self.config.f_max
+                )
             
             # Convert to log scale (dB)
             mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
             
-            self.logger.debug(f"Generated mel-spectrogram shape: {mel_spec_db.shape}")
+            self.logger.debug(f"Generated mel-spectrogram shape: {mel_spec_db.shape} (n_fft={n_fft}, hop_length={hop_length})")
             return mel_spec_db
             
         except MemoryError as e:
@@ -277,16 +321,22 @@ class AudioProcessor:
         if augment_type == "pitch_shift":
             # Pitch shifting in semitones
             n_steps = kwargs.get('n_steps', 0)  # Default: no shift
-            return librosa.effects.pitch_shift(
-                audio, 
-                sr=self.config.sample_rate, 
-                n_steps=n_steps
-            )
+            with warnings.catch_warnings():
+                # Suppress warnings about n_fft being too large for short audio
+                warnings.filterwarnings("ignore", message=".*n_fft.*too large.*")
+                return librosa.effects.pitch_shift(
+                    audio, 
+                    sr=self.config.sample_rate, 
+                    n_steps=n_steps
+                )
             
         elif augment_type == "time_stretch":
             # Time stretching
             rate = kwargs.get('rate', 1.0)  # Default: no stretch
-            return librosa.effects.time_stretch(audio, rate=rate)
+            with warnings.catch_warnings():
+                # Suppress warnings about n_fft being too large for short audio
+                warnings.filterwarnings("ignore", message=".*n_fft.*too large.*")
+                return librosa.effects.time_stretch(audio, rate=rate)
             
         elif augment_type == "noise":
             # Add Gaussian noise
