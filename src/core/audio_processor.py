@@ -7,6 +7,7 @@ audio files into mel-spectrograms suitable for machine learning model input.
 
 from typing import Optional, Tuple, Union
 from pathlib import Path
+import logging
 import numpy as np
 import yaml
 import librosa
@@ -66,6 +67,17 @@ class AudioProcessor:
             config: Audio processing configuration. If None, uses defaults.
         """
         self.config = config or AudioConfig()
+        self.logger = logging.getLogger(__name__)
+        
+        # Configure logging if not already configured
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
     
     def validate_audio_file(self, file_path: Union[str, Path]) -> bool:
         """
@@ -104,7 +116,10 @@ class AudioProcessor:
             ValueError: If audio format is not supported
         """
         if not self.validate_audio_file(file_path):
+            self.logger.error(f"Audio file validation failed: {file_path}")
             raise FileNotFoundError(f"Audio file not found or unsupported format: {file_path}")
+        
+        self.logger.info(f"Loading audio file: {file_path}")
         
         try:
             # Load audio using librosa with target sample rate and mono conversion
@@ -114,9 +129,11 @@ class AudioProcessor:
                 mono=True,
                 dtype=np.float32
             )
+            self.logger.info(f"Successfully loaded audio: {len(audio)} samples, {len(audio)/self.config.sample_rate:.2f}s")
             return audio
             
         except Exception as e:
+            self.logger.error(f"Failed to load audio file {file_path}: {str(e)}")
             raise ValueError(f"Failed to load audio file {file_path}: {str(e)}")
     
     def normalize_audio(self, audio: np.ndarray) -> np.ndarray:
@@ -188,6 +205,7 @@ class AudioProcessor:
         Returns:
             Mel-spectrogram with shape (n_mels, time_frames)
         """
+        self.logger.debug(f"Generating mel-spectrogram for audio: {len(audio)} samples")
         # Apply pre-emphasis if configured
         if self.config.pre_emphasis > 0:
             audio = self.apply_pre_emphasis(audio)
@@ -206,6 +224,7 @@ class AudioProcessor:
         # Convert to log scale (dB)
         mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
         
+        self.logger.debug(f"Generated mel-spectrogram shape: {mel_spec_db.shape}")
         return mel_spec_db
     
     def augment_audio(self, audio: np.ndarray, augment_type: str, **kwargs) -> np.ndarray:
@@ -220,6 +239,8 @@ class AudioProcessor:
         Returns:
             Augmented audio array
         """
+        self.logger.debug(f"Applying {augment_type} augmentation with params: {kwargs}")
+        
         if augment_type == "pitch_shift":
             # Pitch shifting in semitones
             n_steps = kwargs.get('n_steps', 0)  # Default: no shift
