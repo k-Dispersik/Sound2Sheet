@@ -98,6 +98,24 @@ class AudioProcessor:
         supported_formats = {'.wav', '.mp3', '.m4a'}
         if file_path.suffix.lower() not in supported_formats:
             return False
+        
+        # Check if file is not empty and appears to be valid
+        try:
+            if file_path.stat().st_size == 0:
+                self.logger.warning(f"Audio file is empty: {file_path}")
+                return False
+                
+            # Try to peek at the file content for basic validation
+            if file_path.suffix.lower() == '.wav':
+                return self._validate_wav_file(file_path)
+            elif file_path.suffix.lower() == '.mp3':
+                return self._validate_mp3_file(file_path)
+            elif file_path.suffix.lower() == '.m4a':
+                return self._validate_m4a_file(file_path)
+                
+        except (OSError, IOError) as e:
+            self.logger.warning(f"Cannot access file {file_path}: {e}")
+            return False
             
         return True
     
@@ -206,26 +224,41 @@ class AudioProcessor:
             Mel-spectrogram with shape (n_mels, time_frames)
         """
         self.logger.debug(f"Generating mel-spectrogram for audio: {len(audio)} samples")
-        # Apply pre-emphasis if configured
-        if self.config.pre_emphasis > 0:
-            audio = self.apply_pre_emphasis(audio)
         
-        # Convert to mel-spectrogram
-        mel_spec = librosa.feature.melspectrogram(
-            y=audio,
-            sr=self.config.sample_rate,
-            n_fft=self.config.n_fft,
-            hop_length=self.config.hop_length,
-            n_mels=self.config.n_mels,
-            fmin=self.config.f_min,
-            fmax=self.config.f_max
-        )
+        # Check for memory constraints
+        estimated_memory = self._estimate_memory_usage(audio)
+        if estimated_memory > 1e9:  # 1GB threshold
+            self.logger.warning(f"Large memory usage estimated: {estimated_memory/1e6:.1f}MB")
         
-        # Convert to log scale (dB)
-        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-        
-        self.logger.debug(f"Generated mel-spectrogram shape: {mel_spec_db.shape}")
-        return mel_spec_db
+        try:
+            # Apply pre-emphasis if configured
+            if self.config.pre_emphasis > 0:
+                audio = self.apply_pre_emphasis(audio)
+            
+            # Convert to mel-spectrogram
+            mel_spec = librosa.feature.melspectrogram(
+                y=audio,
+                sr=self.config.sample_rate,
+                n_fft=self.config.n_fft,
+                hop_length=self.config.hop_length,
+                n_mels=self.config.n_mels,
+                fmin=self.config.f_min,
+                fmax=self.config.f_max
+            )
+            
+            # Convert to log scale (dB)
+            mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+            
+            self.logger.debug(f"Generated mel-spectrogram shape: {mel_spec_db.shape}")
+            return mel_spec_db
+            
+        except MemoryError as e:
+            self.logger.error(f"Out of memory during mel-spectrogram generation: {e}")
+            raise MemoryError(f"Insufficient memory to process audio of length {len(audio)}. "
+                            f"Consider using shorter audio segments or reducing parameters.")
+        except Exception as e:
+            self.logger.error(f"Error generating mel-spectrogram: {e}")
+            raise
     
     def augment_audio(self, audio: np.ndarray, augment_type: str, **kwargs) -> np.ndarray:
         """
@@ -294,3 +327,91 @@ class AudioProcessor:
             # Return processed audio
             audio = self.apply_pre_emphasis(audio)
             return audio
+    
+    def _validate_wav_file(self, file_path: Path) -> bool:
+        """Validate WAV file integrity."""
+        try:
+            with open(file_path, 'rb') as f:
+                # Check WAV header
+                header = f.read(12)
+                if len(header) < 12:
+                    return False
+                if header[:4] != b'RIFF' or header[8:12] != b'WAVE':
+                    self.logger.warning(f"Invalid WAV header in {file_path}")
+                    return False
+            return True
+        except Exception as e:
+            self.logger.warning(f"Error validating WAV file {file_path}: {e}")
+            return False
+    
+    def _validate_mp3_file(self, file_path: Path) -> bool:
+        """Validate MP3 file integrity."""
+        try:
+            with open(file_path, 'rb') as f:
+                # Check for MP3 frame header or ID3 tag
+                header = f.read(10)
+                if len(header) < 10:
+                    return False
+                
+                # Check for ID3 tag or MP3 frame sync
+                if header[:3] == b'ID3' or header[0:2] == b'\xff\xfb':
+                    return True
+                
+                # Look for MP3 frame header in first few bytes
+                f.seek(0)
+                chunk = f.read(100)
+                for i in range(len(chunk) - 1):
+                    if chunk[i] == 0xff and (chunk[i+1] & 0xf0) == 0xf0:
+                        return True
+                        
+                self.logger.warning(f"No valid MP3 header found in {file_path}")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"Error validating MP3 file {file_path}: {e}")
+            return False
+    
+    def _validate_m4a_file(self, file_path: Path) -> bool:
+        """Validate M4A file integrity."""
+        try:
+            with open(file_path, 'rb') as f:
+                # Check for MP4/M4A box structure
+                header = f.read(8)
+                if len(header) < 8:
+                    return False
+                
+                # Skip size (4 bytes) and check box type
+                box_type = header[4:8]
+                if box_type in [b'ftyp', b'mdat', b'moov']:
+                    return True
+                    
+                self.logger.warning(f"Invalid M4A box type in {file_path}")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"Error validating M4A file {file_path}: {e}")
+            return False
+    
+    def _estimate_memory_usage(self, audio: np.ndarray) -> float:
+        """
+        Estimate memory usage for mel-spectrogram generation.
+        
+        Args:
+            audio: Input audio array
+            
+        Returns:
+            Estimated memory usage in bytes
+        """
+        # Estimate number of frames
+        n_frames = 1 + (len(audio) - self.config.n_fft) // self.config.hop_length
+        
+        # Memory for STFT: n_fft/2+1 x n_frames x 8 bytes (complex64)
+        stft_memory = (self.config.n_fft // 2 + 1) * n_frames * 8
+        
+        # Memory for mel-spectrogram: n_mels x n_frames x 4 bytes (float32)
+        mel_memory = self.config.n_mels * n_frames * 4
+        
+        # Add some overhead for intermediate calculations
+        total_memory = (stft_memory + mel_memory) * 2
+        
+        return total_memory
