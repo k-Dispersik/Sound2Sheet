@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import soundfile as sf
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from core.audio_visualizer import AudioVisualizer
 from core.audio_processor import AudioProcessor
