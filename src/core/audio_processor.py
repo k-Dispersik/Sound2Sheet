@@ -83,7 +83,7 @@ class AudioProcessor:
             return False
             
         # Check file extension
-        supported_formats = {'.wav', '.mp3'}
+        supported_formats = {'.wav', '.mp3', '.m4a'}
         if file_path.suffix.lower() not in supported_formats:
             return False
             
@@ -94,7 +94,7 @@ class AudioProcessor:
         Load audio file and convert to numpy array.
         
         Args:
-            file_path: Path to audio file (.wav, .mp3)
+            file_path: Path to audio file (.wav, .mp3, .m4a)
             
         Returns:
             Audio data as numpy array

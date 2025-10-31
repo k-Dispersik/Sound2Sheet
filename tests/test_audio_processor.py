@@ -89,6 +89,13 @@ class TestAudioProcessor(unittest.TestCase):
             self.assertTrue(self.processor.validate_audio_file(temp_path))
             temp_path.unlink()
     
+    def test_validate_audio_file_valid_m4a(self):
+        """Test validation of valid M4A file."""
+        with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
+            self.assertTrue(self.processor.validate_audio_file(temp_path))
+            temp_path.unlink()
+    
     def test_validate_audio_file_unsupported_format(self):
         """Test validation of unsupported audio format."""
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as temp_file:
