@@ -2,14 +2,14 @@
 
 # Dataset Generation
 dataset:
-  samples: 1000  # Total samples to generate
+  samples: 5000  # Total samples to generate (5000 for serious training)
   complexity: "medium"  # simple, medium, complex (maps to beginner, intermediate, advanced)
   min_notes: 10
-  max_notes: 50
+  max_notes: 100
   min_duration: 5.0  # seconds
-  max_duration: 30.0
-  key_signatures: ["C", "G", "D", "F", "Bb"]  # null for all 24
-  time_signatures: ["4/4", "3/4", "6/8"]  # null for all
+  max_duration: 60.0
+  key_signatures: null  # null for all 24 major/minor keys
+  time_signatures: null  # null for all time signatures
   output_dir: "data/datasets/training_run"
   synthesize_audio: true  # Always synthesize audio for training
   soundfont_path: null  # Auto-detect if null
@@ -26,60 +26,62 @@ audio:
   pre_emphasis: 0.97
   augmentation:
     enabled: true
+    noise_type: "random"  # Specific type OR 'random' to randomly choose
+    noise_types_pool: ["white", "pink", "ambient"]  # Types to randomly choose from (if noise_type='random')
+    noise_level: 0.005
     pitch_shift_range: [-2, 2]  # semitones
     time_stretch_range: [0.9, 1.1]
-    noise_level: 0.005
 
 # Model Architecture
 model:
   encoder_name: "MIT/ast-finetuned-audioset-10-10-0.4593"
-  freeze_encoder: true
+  freeze_encoder: true  # Start with frozen encoder for faster initial training
   hidden_size: 768
   num_decoder_layers: 6
   num_attention_heads: 8
   dropout: 0.1
-  max_sequence_length: 512
+  max_sequence_length: 1024  # Increased for longer sequences
   vocab_size: 388  # MIDI notes + special tokens
   device: "cuda"  # cuda, cpu, or auto
 
 # Training Configuration
 training:
-  batch_size: 16
-  num_epochs: 50
+  batch_size: 16  # Safe for 6GB VRAM (RTX 4050)
+  num_epochs: 100  # More epochs for serious training
   learning_rate: 0.0001
   weight_decay: 0.01
-  warmup_steps: 500
+  warmup_steps: 1000  # Longer warmup for stability
   max_grad_norm: 1.0
   use_mixed_precision: true
-  gradient_accumulation_steps: 1
+  gradient_accumulation_steps: 4  # Effective batch size = 16 * 4 = 64
   num_workers: 4
   
   # Learning rate schedule
   lr_schedule: "cosine"  # linear, cosine, constant
   
   # Early stopping
-  early_stopping_patience: 10
-  early_stopping_min_delta: 0.001
+  early_stopping_patience: 15  # More patience for better convergence
+  early_stopping_min_delta: 0.0005  # More sensitive threshold
   
   # Checkpointing
   checkpoint_dir: "models/checkpoints"
   save_every_n_epochs: 5
-  keep_last_n_checkpoints: 3
+  keep_last_n_checkpoints: 5  # Keep more checkpoints for analysis
   
   # Logging
   log_dir: "logs"
-  log_every_n_steps: 10
+  log_every_n_steps: 50  # Less frequent logging for speed
   eval_every_n_epochs: 1
 
 # Inference Configuration
 inference:
   strategy: "beam_search"  # greedy, beam_search, sampling
-  max_length: 512
+  max_length: 1024  # Match model's max_sequence_length
   num_beams: 5
   temperature: 1.0
   top_k: 50
   top_p: 0.95
-  repetition_penalty: 1.0
+  repetition_penalty: 1.2  # Prevent repeating same token
 
 # Evaluation Configuration
 evaluation:

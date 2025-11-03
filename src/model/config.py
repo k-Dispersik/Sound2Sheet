@@ -178,6 +178,8 @@ class DataConfig:
     # Augmentation
     use_augmentation: bool = True
     noise_scale: float = 0.005
+    noise_type: str = 'white'  # white, pink, brown, ambient, hum, or 'random'
+    noise_types_pool: list = None  # List of noise types for random selection (if noise_type='random')
     pitch_shift_range: int = 2  # semitones
     
     # Caching

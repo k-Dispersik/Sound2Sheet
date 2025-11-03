@@ -380,7 +380,7 @@ def parse_args_to_config() -> PipelineConfig:
     config = dict_to_config(merged_config)
     
     # Store additional args
-    config.experiment_name = args.name
+    config.experiment_name = args.name if args.name else 'test_run'
     config.seed = args.seed
     config.resume_checkpoint = args.resume
     config.eval_only = args.eval_only

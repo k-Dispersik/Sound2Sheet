@@ -131,8 +131,15 @@ class PianoDataset(Dataset):
         
         # If noise_type is 'random', randomly choose a type
         if noise_type == 'random':
-            available_types = self.noise_factory.get_available_types()
-            noise_type = np.random.choice(available_types)
+            # Check if custom pool is defined
+            noise_types_pool = getattr(self.data_config, 'noise_types_pool', None)
+            if noise_types_pool and len(noise_types_pool) > 0:
+                # Use custom pool
+                noise_type = np.random.choice(noise_types_pool)
+            else:
+                # Use all available types
+                available_types = self.noise_factory.get_available_types()
+                noise_type = np.random.choice(available_types)
         
         # Get noise strategy
         try:

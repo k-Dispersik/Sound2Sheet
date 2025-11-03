@@ -245,7 +245,10 @@ def create_model_configs(config: PipelineConfig, manifests: Dict[str, Path]) -> 
         n_mels=config.audio.n_mels,
         fmin=config.audio.f_min,
         fmax=config.audio.f_max,
-        use_augmentation=config.audio.augmentation.get('enabled', True)
+        use_augmentation=config.audio.augmentation.get('enabled', True),
+        noise_scale=config.audio.augmentation.get('noise_level', 0.005),
+        noise_type=config.audio.augmentation.get('noise_type', 'white'),
+        noise_types_pool=config.audio.augmentation.get('noise_types_pool', None)
     )
     
     return model_config, training_config, data_config
