@@ -14,6 +14,7 @@ from torch.utils.data import Dataset
 import librosa
 
 from ..core.audio_processor import AudioProcessor
+from ..core.noise_strategies import NoiseStrategyFactory
 from .config import DataConfig, ModelConfig
 
 
@@ -55,6 +56,9 @@ class PianoDataset(Dataset):
         audio_config.hop_length = data_config.hop_length
         audio_config.n_fft = data_config.n_fft
         self.audio_processor = AudioProcessor(config=audio_config)
+        
+        # Initialize noise strategy factory for augmentation
+        self.noise_factory = NoiseStrategyFactory()
         
         # Load manifest
         self.samples = self._load_manifest()
@@ -121,10 +125,28 @@ class PianoDataset(Dataset):
         return audio
     
     def _augment_audio(self, audio: np.ndarray) -> np.ndarray:
-        """Apply random augmentation to audio."""
-        # Add random Gaussian noise
+        """Apply random augmentation to audio using noise strategies."""
+        # Get noise type from config
+        noise_type = getattr(self.data_config, 'noise_type', 'white')
+        
+        # If noise_type is 'random', randomly choose a type
+        if noise_type == 'random':
+            available_types = self.noise_factory.get_available_types()
+            noise_type = np.random.choice(available_types)
+        
+        # Get noise strategy
+        try:
+            noise_strategy = self.noise_factory.get_strategy(noise_type)
+        except ValueError as e:
+            self.logger.warning(f"Unknown noise type '{noise_type}', falling back to white noise: {e}")
+            noise_strategy = self.noise_factory.get_strategy('white')
+        
+        # Generate noise
         noise_level = self.data_config.noise_scale
-        noise = np.random.randn(len(audio)) * noise_level
+        sample_rate = self.data_config.sample_rate
+        noise = noise_strategy.generate(len(audio), sample_rate) * noise_level
+        
+        # Add noise to audio
         augmented = audio + noise
         
         # Clip to valid range
