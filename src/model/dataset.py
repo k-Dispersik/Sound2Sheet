@@ -59,8 +59,8 @@ class PianoDataset(Dataset):
         # Load manifest
         self.samples = self._load_manifest()
         
-        # Get dataset base directory (parent of manifest)
-        self.dataset_dir = self.manifest_path.parent
+        # Get dataset base directory from data_config (not manifest parent, as manifests may be in metadata/ subdirectory)
+        self.dataset_dir = Path(data_config.dataset_dir)
         
         self.logger.info(f"Loaded {len(self.samples)} samples from {manifest_path}")
     
@@ -277,9 +277,16 @@ def create_dataloaders(
         Tuple of (train_loader, val_loader, test_loader)
     """
     # Get manifest paths from dataset directory
-    train_manifest = data_config.dataset_dir / 'train_manifest.json'
-    val_manifest = data_config.dataset_dir / 'val_manifest.json'
-    test_manifest = data_config.dataset_dir / 'test_manifest.json'
+    # Try metadata subdirectory first (new format), then root (legacy)
+    metadata_dir = data_config.dataset_dir / 'metadata'
+    if metadata_dir.exists():
+        train_manifest = metadata_dir / 'train_manifest.json'
+        val_manifest = metadata_dir / 'val_manifest.json'
+        test_manifest = metadata_dir / 'test_manifest.json'
+    else:
+        train_manifest = data_config.dataset_dir / 'train_manifest.json'
+        val_manifest = data_config.dataset_dir / 'val_manifest.json'
+        test_manifest = data_config.dataset_dir / 'test_manifest.json'
     
     # Create datasets
     train_dataset = PianoDataset(
