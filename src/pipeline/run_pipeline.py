@@ -242,7 +242,8 @@ def create_model_configs(config: PipelineConfig, manifests: Dict[str, Path]) -> 
         checkpoint_dir=Path(config.training.checkpoint_dir),
         log_dir=Path(config.training.log_dir),
         logging_steps=config.training.log_every_n_steps,
-        num_workers=config.training.num_workers
+        num_workers=config.training.num_workers,
+        gpu_memory_fraction=getattr(config.training, 'gpu_memory_fraction', None)
     )
     
     # Data configuration
@@ -275,6 +276,24 @@ def train_model(config: PipelineConfig, model_config: ModelConfigClass,
     logger.info("STEP 2: Model Training")
     logger.info("=" * 80)
     
+    # Optionally cap CUDA memory per process to reduce GPU pressure/temperature
+    if model_config.device.startswith('cuda') and torch.cuda.is_available():
+        frac = getattr(training_config, 'gpu_memory_fraction', None)
+        if frac is not None:
+            try:
+                if hasattr(torch.cuda, 'set_per_process_memory_fraction'):
+                    torch.cuda.set_per_process_memory_fraction(float(frac), torch.cuda.current_device())
+                    logger.info(f"Set CUDA per-process memory fraction to {frac}")
+                else:
+                    logger.info("torch.cuda.set_per_process_memory_fraction not available in this torch build; skipping GPU memory cap")
+            except Exception as e:
+                logger.warning(f"Failed to set CUDA memory fraction: {e}")
+
+    # Silence noisy dataset/audio modules to keep logs compact
+    logging.getLogger('src.dataset.audio_synthesizer').setLevel(logging.WARNING)
+    logging.getLogger('src.dataset.midi_generator').setLevel(logging.WARNING)
+    logging.getLogger('src.dataset.dataset_generator').setLevel(logging.INFO)
+
     # Create dataloaders
     logger.info("Creating dataloaders...")
     train_loader, val_loader, test_loader = create_dataloaders(

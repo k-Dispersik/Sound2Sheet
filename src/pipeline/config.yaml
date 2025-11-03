@@ -55,6 +55,9 @@ training:
   use_mixed_precision: true
   gradient_accumulation_steps: 4  # Effective batch size = 16 * 4 = 64
   num_workers: 4
+  # Optionally cap the fraction of GPU memory used by this process (0.0-1.0)
+  # Example: 0.5 to limit to ~50% of available GPU memory
+  gpu_memory_fraction: 0.5
   
   # Learning rate schedule
   lr_schedule: "cosine"  # linear, cosine, constant

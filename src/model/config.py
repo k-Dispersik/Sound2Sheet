@@ -91,6 +91,10 @@ class TrainingConfig:
     num_workers: int = 4
     pin_memory: bool = True
     prefetch_factor: int = 2
+
+    # GPU memory fraction: float in (0.0, 1.0] to cap per-process GPU memory (optional)
+    # If set, pipeline will call torch.cuda.set_per_process_memory_fraction(fraction)
+    gpu_memory_fraction: Optional[float] = None
     
     # Validation
     val_batch_size: int = 32

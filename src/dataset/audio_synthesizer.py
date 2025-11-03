@@ -11,6 +11,8 @@ import logging
 import subprocess
 import numpy as np
 import soundfile as sf
+import os
+import contextlib
 
 try:
     from midi2audio import FluidSynth
@@ -79,10 +81,12 @@ class AudioSynthesizer:
             )
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+            # Keep synthesizer quieter by default
+            self.logger.setLevel(logging.WARNING)
         
-        # Initialize FluidSynth
-        self.fs = FluidSynth(sound_font=str(self.soundfont_path), sample_rate=self.sample_rate)
+        # Avoid initializing midi2audio FluidSynth (it may print to stdout/stderr).
+        # We'll call the system 'fluidsynth' via subprocess in synthesize().
+        self.fs = None
     
     def synthesize(
         self,

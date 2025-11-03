@@ -81,6 +81,7 @@ class TrainingConfig:
     log_dir: str = "logs"
     log_every_n_steps: int = 10
     eval_every_n_epochs: int = 1
+    gpu_memory_fraction: Optional[float] = None
 
 
 @dataclass

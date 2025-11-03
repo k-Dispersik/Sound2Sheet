@@ -56,6 +56,7 @@ training:
   use_mixed_precision: true
   gradient_accumulation_steps: 1
   num_workers: 2  # Fewer workers
+  gpu_memory_fraction: 0.5  # Limit GPU memory to 50%
   
   lr_schedule: "cosine"
   
