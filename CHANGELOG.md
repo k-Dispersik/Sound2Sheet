@@ -16,6 +16,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.5.0] - 2025-11-03
+### Added
+- **Feature 5: Evaluation System (Complete)**
+  - Comprehensive metrics calculation:
+    - Note accuracy measurement
+    - Onset/offset/pitch F1-scores
+    - Precision and recall for all aspects
+    - Timing deviation analysis (mean error ~23.5ms)
+    - Tempo error calculation
+    - Pitch error distribution per MIDI note
+  - Evaluator with batch processing:
+    - Single sample and batch evaluation support
+    - Progress callbacks for UI integration
+    - Statistical aggregation (mean, std, min, max)
+    - Error analysis (TP/FP/FN breakdown)
+    - JSON persistence with full metadata
+  - Report generation:
+    - CSV export for sample-level metrics (15 columns)
+    - JSON export with complete evaluation results
+    - Configurable output formats
+  - Visualization system:
+    - Dashboard with 6 comprehensive plots
+    - Confusion matrix for pitch predictions
+    - Error distribution visualizations
+    - Metrics tracking over time
+    - Per-sample performance comparison
+  - Command-line interface:
+    - `evaluate` command for running evaluations
+    - `report` command for generating CSV/JSON reports
+    - `visualize` command for creating plots
+  - Note matching algorithm:
+    - Greedy matching with configurable tolerances
+    - Onset tolerance (default: 50ms)
+    - Offset tolerance (default: 50ms)
+    - Pitch tolerance (default: exact match)
+  - Testing suite (53 tests, 100% passing):
+    - Metrics calculation tests (19 tests)
+    - Evaluator tests (20 tests)
+    - Report generator tests (4 tests)
+    - Visualizer tests (10 tests)
+  - Documentation:
+    - Comprehensive README with architecture diagram
+    - Usage examples for all components
+    - API reference documentation
+    - JSON format specifications
+- **Feature 4.5: Converter Enhancements**
+  - Advanced NoteSequence features:
+    - Tied notes support with multiple tie chain handling
+    - Expression markers (dynamics, articulation)
+    - Measure organization with time signatures
+    - Automatic key signature detection
+    - Automatic time signature detection
+  - Enhanced Note class:
+    - Tied note properties (is_tied_start, is_tied_end, tie_id)
+    - Dynamic markings (Dynamic enum: ppp to fff)
+    - Articulation support (Articulation enum: staccato, legato, accent, etc.)
+    - Expression marker metadata
+  - MusicXML export improvements:
+    - Full tied notes export with proper notation
+    - Dynamic markings in MusicXML format
+    - Articulation symbols
+    - Measure-based organization
+    - Key and time signature handling
+  - Performance utilities:
+    - Benchmark decorator for function timing
+    - BenchmarkResult dataclass for statistics
+    - BenchmarkRegistry for centralized tracking
+    - Automatic min/max/mean/std calculation
+  - Testing suite expansion:
+    - Tied notes tests (15 tests)
+    - Expression markers tests (10 tests)
+    - Measure organization tests (12 tests)
+    - Benchmark utility tests (22 tests)
+    - Total converter tests: 329 passing
+  - Documentation:
+    - Updated README with new features
+    - Code examples for tied notes and expressions
+    - MusicXML export examples
+
+### Changed
+- Simplified evaluation reporting:
+  - Removed HTML report generation (not needed)
+  - Removed PDF report generation (not needed)
+  - Focused on CSV/JSON for data export
+- Updated TODO_LIST.md:
+  - Marked Feature 5 as completed
+  - Marked Feature 4.5 enhancements as completed
+  - Updated milestones (Milestone 5 and 6)
+- Test count updates:
+  - Feature 4 (Converter): 51 → 329 tests
+  - Feature 5 (Evaluation): 53 tests added
+
+### Fixed
+- Evaluation metric edge cases (zero division handling)
+- Empty results handling in visualizations
+- Note matching boundary conditions
+
 ## [0.4.0] - 2025-10-31
 ### Added
 - **Feature 3: Model Training Pipeline (Complete)**
