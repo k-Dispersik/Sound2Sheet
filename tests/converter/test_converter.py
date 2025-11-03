@@ -118,12 +118,22 @@ class TestMIDIConverter:
 class TestMusicXMLConverter:
     """Test MusicXML converter."""
     
-    def test_not_implemented(self, tmp_path):
-        """Test MusicXML converter raises NotImplementedError."""
+    def test_musicxml_requires_music21(self, tmp_path):
+        """Test MusicXML converter requires music21 library."""
         sequence = NoteSequence()
         output_path = tmp_path / "output.xml"
         
         converter = MusicXMLConverter()
         
-        with pytest.raises(NotImplementedError, match="MusicXML export not yet implemented"):
+        # Should work if music21 installed, else raise ImportError
+        try:
+            import music21
+            # If music21 available, test export
+            notes = [Note(pitch=60, start_time=0.0, duration=0.5)]
+            sequence = NoteSequence(notes=notes)
             converter.convert(sequence, output_path)
+            assert output_path.exists()
+        except ImportError:
+            # If music21 not available, expect ImportError
+            with pytest.raises(ImportError, match="music21 library required"):
+                converter.convert(sequence, output_path)

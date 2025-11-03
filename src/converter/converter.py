@@ -126,7 +126,7 @@ class MIDIConverter(Converter):
 
 
 class MusicXMLConverter(Converter):
-    """Converts note sequence to MusicXML format (placeholder)."""
+    """Converts note sequence to MusicXML format."""
     
     def convert(self, sequence: NoteSequence, output_path: Union[str, Path]) -> None:
         """
@@ -135,12 +135,58 @@ class MusicXMLConverter(Converter):
         Args:
             sequence: NoteSequence to export
             output_path: Output MusicXML file path
-            
-        Note:
-            This is a placeholder implementation. Full MusicXML support
-            requires music21 library integration.
         """
-        raise NotImplementedError(
-            "MusicXML export not yet implemented. "
-            "Use JSONConverter or MIDIConverter instead."
-        )
+        try:
+            from music21 import stream, note, tempo, meter, key
+        except ImportError:
+            raise ImportError(
+                "music21 library required for MusicXML export. "
+                "Install with: pip install music21"
+            )
+        
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create music21 stream
+        score = stream.Score()
+        part = stream.Part()
+        
+        # Add tempo marking
+        mm = tempo.MetronomeMark(number=sequence.tempo)
+        part.append(mm)
+        
+        # Add time signature
+        time_sig = meter.TimeSignature(f'{sequence.time_signature[0]}/{sequence.time_signature[1]}')
+        part.append(time_sig)
+        
+        # Add key signature
+        # Parse key signature (e.g., "C major" -> "C", mode="major")
+        key_parts = sequence.key_signature.split()
+        if len(key_parts) >= 2:
+            tonic = key_parts[0]
+            mode_str = key_parts[1]
+            key_sig = key.Key(tonic, mode_str)
+        else:
+            key_sig = key.Key('C')  # Default
+        part.append(key_sig)
+        
+        # Sort notes by start time
+        sorted_notes = sorted(sequence.notes, key=lambda n: n.start_time)
+        
+        # Convert notes
+        current_offset = 0.0
+        for seq_note in sorted_notes:
+            # Create music21 note
+            m21_note = note.Note(seq_note.pitch)
+            m21_note.quarterLength = seq_note.duration * (sequence.tempo / 60)
+            m21_note.volume.velocity = seq_note.velocity
+            
+            # Set offset
+            m21_note.offset = seq_note.start_time * (sequence.tempo / 60)
+            
+            part.append(m21_note)
+        
+        score.append(part)
+        
+        # Write to file
+        score.write('musicxml', fp=str(output_path))
