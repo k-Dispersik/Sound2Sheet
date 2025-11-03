@@ -165,15 +165,49 @@ Sound2Sheet/
 │   │   ├── note_sequence.py
 │   │   ├── musicxml_converter.py
 │   │   └── README.md
-│   └── evaluation/        # Evaluation system
-│       ├── metrics.py
-│       ├── evaluator.py
-│       ├── visualizer.py
+│   ├── evaluation/        # Evaluation system
+│   │   ├── metrics.py
+│   │   ├── evaluator.py
+│   │   ├── visualizer.py
+│   │   └── README.md
+│   └── pipeline/          # Training pipeline
+│       ├── run_pipeline.py
+│       ├── config_parser.py
 │       └── README.md
+├── results/               # Training results (organized by date)
+│   ├── {YYYY-MM-DD}/
+│   │   └── {experiment_name}/
+│   │       ├── model/          # Final trained model
+│   │       ├── checkpoints/    # Training checkpoints
+│   │       ├── visualizations/ # Loss curves, graphs
+│   │       ├── reports/        # Training reports
+│   │       ├── logs/           # Training logs
+│   │       └── temp_data/      # Cleaned after training
+│   └── README.md
 ├── tests/                 # Comprehensive test suite (531 tests)
 ├── spec/                  # Specifications and documentation
-└── data/                  # Datasets and model outputs
+└── data/                  # Temporary datasets (auto-cleaned)
 ```
+
+### Training Pipeline
+
+The pipeline automatically organizes results by date and experiment name, and **cleans up training data** to save disk space:
+
+```bash
+# Run training
+python -m src.pipeline.run_pipeline \
+    --samples 1000 \
+    --epochs 50 \
+    --batch-size 32 \
+    --name my_experiment
+
+# Results saved to: results/2025-11-03/my_experiment/
+# ✅ Model, checkpoints, visualizations, reports saved
+# ❌ Audio/MIDI training files automatically deleted (saves GB of space!)
+```
+
+See **[Pipeline Documentation](src/pipeline/README.md)** and **[Results Structure](results/README.md)** for details.
+
 
 ## 🧪 Testing
 

@@ -17,5 +17,8 @@ data/
 *.mid
 *.midi
 
+# results and outputs
+results/
+
 # IDE
 .vscode/
