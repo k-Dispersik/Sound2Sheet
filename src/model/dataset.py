@@ -59,8 +59,8 @@ class PianoDataset(Dataset):
         # Load manifest
         self.samples = self._load_manifest()
         
-        # Get dataset base directory
-        self.dataset_dir = self.manifest_path.parent.parent
+        # Get dataset base directory (parent of manifest)
+        self.dataset_dir = self.manifest_path.parent
         
         self.logger.info(f"Loaded {len(self.samples)} samples from {manifest_path}")
     
