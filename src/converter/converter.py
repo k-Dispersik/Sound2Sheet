@@ -184,6 +184,46 @@ class MusicXMLConverter(Converter):
             # Set offset
             m21_note.offset = seq_note.start_time * (sequence.tempo / 60)
             
+            # Add tie markers if present
+            if seq_note.is_tied_start or seq_note.is_tied_end:
+                from music21 import tie
+                if seq_note.is_tied_start and not seq_note.is_tied_end:
+                    m21_note.tie = tie.Tie('start')
+                elif seq_note.is_tied_end and not seq_note.is_tied_start:
+                    m21_note.tie = tie.Tie('stop')
+                else:  # Middle of a tie chain
+                    m21_note.tie = tie.Tie('continue')
+            
+            # Add dynamic marking if present
+            if seq_note.dynamic is not None:
+                from music21 import dynamics
+                dynamic_map = {
+                    'ppp': dynamics.Dynamic('ppp'),
+                    'pp': dynamics.Dynamic('pp'),
+                    'p': dynamics.Dynamic('p'),
+                    'mp': dynamics.Dynamic('mp'),
+                    'mf': dynamics.Dynamic('mf'),
+                    'f': dynamics.Dynamic('f'),
+                    'ff': dynamics.Dynamic('ff'),
+                    'fff': dynamics.Dynamic('fff'),
+                }
+                if seq_note.dynamic.value in dynamic_map:
+                    # Dynamics should be added separately, not as articulations
+                    part.insert(m21_note.offset, dynamic_map[seq_note.dynamic.value])
+            
+            # Add articulation marking if present
+            if seq_note.articulation is not None:
+                from music21 import articulations
+                articulation_map = {
+                    'staccato': articulations.Staccato(),
+                    'staccatissimo': articulations.Staccatissimo(),
+                    'tenuto': articulations.Tenuto(),
+                    'accent': articulations.Accent(),
+                    'marcato': articulations.StrongAccent(),
+                }
+                if seq_note.articulation.value in articulation_map:
+                    m21_note.articulations.append(articulation_map[seq_note.articulation.value])
+            
             part.append(m21_note)
         
         score.append(part)
