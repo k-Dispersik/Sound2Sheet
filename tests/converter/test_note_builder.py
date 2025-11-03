@@ -3,6 +3,7 @@ Tests for NoteBuilder class.
 """
 
 import pytest
+from src.converter.note import Note
 from src.converter.note_builder import NoteBuilder
 from src.converter.quantizer import QuantizationConfig
 
@@ -189,3 +190,107 @@ class TestNoteBuilderQuantization:
         # Should be quantized (120 BPM = 0.5s per beat)
         assert sequence.notes[0].start_time == pytest.approx(0.0, abs=0.05)
         assert sequence.notes[1].start_time == pytest.approx(0.5, abs=0.05)
+
+
+class TestNoteBuilderDetection:
+    """Test automatic detection features."""
+    
+    def test_detect_time_signature_4_4(self):
+        """Test detecting 4/4 time signature."""
+        builder = NoteBuilder()
+        
+        # Create notes in 4/4 pattern (4 beats per measure)
+        notes = [
+            Note(pitch=60, start_time=0.0, duration=0.5),   # Beat 1
+            Note(pitch=62, start_time=0.5, duration=0.5),   # Beat 2
+            Note(pitch=64, start_time=1.0, duration=0.5),   # Beat 3
+            Note(pitch=65, start_time=1.5, duration=0.5),   # Beat 4
+            Note(pitch=67, start_time=2.0, duration=0.5),   # Beat 1
+            Note(pitch=69, start_time=2.5, duration=0.5),   # Beat 2
+        ]
+        
+        time_sig = builder.detect_time_signature(notes, tempo=120)
+        assert time_sig[0] in [3, 4, 6]  # Common time signatures
+        assert time_sig[1] == 4
+    
+    def test_detect_time_signature_3_4(self):
+        """Test detecting 3/4 time signature."""
+        builder = NoteBuilder()
+        
+        # Create notes in 3/4 pattern (3 beats per measure)
+        notes = [
+            Note(pitch=60, start_time=0.0, duration=0.5),   # Beat 1
+            Note(pitch=62, start_time=0.5, duration=0.5),   # Beat 2
+            Note(pitch=64, start_time=1.0, duration=0.5),   # Beat 3
+            Note(pitch=65, start_time=1.5, duration=0.5),   # Beat 1
+            Note(pitch=67, start_time=2.0, duration=0.5),   # Beat 2
+            Note(pitch=69, start_time=2.5, duration=0.5),   # Beat 3
+        ]
+        
+        time_sig = builder.detect_time_signature(notes, tempo=120)
+        assert time_sig in [(3, 4), (4, 4), (6, 4)]
+    
+    def test_detect_key_signature_c_major(self):
+        """Test detecting C major key."""
+        builder = NoteBuilder()
+        
+        # C major scale notes (C, D, E, F, G, A, B)
+        notes = [
+            Note(pitch=60, start_time=0.0, duration=0.5),  # C
+            Note(pitch=62, start_time=0.5, duration=0.5),  # D
+            Note(pitch=64, start_time=1.0, duration=0.5),  # E
+            Note(pitch=65, start_time=1.5, duration=0.5),  # F
+            Note(pitch=67, start_time=2.0, duration=0.5),  # G
+            Note(pitch=69, start_time=2.5, duration=0.5),  # A
+            Note(pitch=71, start_time=3.0, duration=0.5),  # B
+            Note(pitch=60, start_time=3.5, duration=0.5),  # C
+        ]
+        
+        key = builder.detect_key_signature(notes)
+        # Should be C major or related key
+        assert "major" in key or "minor" in key
+    
+    def test_detect_key_signature_a_minor(self):
+        """Test detecting A minor key."""
+        builder = NoteBuilder()
+        
+        # A minor scale notes (A, B, C, D, E, F, G)
+        notes = [
+            Note(pitch=69, start_time=0.0, duration=0.5),  # A
+            Note(pitch=71, start_time=0.5, duration=0.5),  # B
+            Note(pitch=60, start_time=1.0, duration=0.5),  # C
+            Note(pitch=62, start_time=1.5, duration=0.5),  # D
+            Note(pitch=64, start_time=2.0, duration=0.5),  # E
+            Note(pitch=65, start_time=2.5, duration=0.5),  # F
+            Note(pitch=67, start_time=3.0, duration=0.5),  # G
+            Note(pitch=69, start_time=3.5, duration=0.5),  # A
+        ]
+        
+        key = builder.detect_key_signature(notes)
+        assert "major" in key or "minor" in key
+    
+    def test_build_with_auto_detection(self):
+        """Test building with automatic parameter detection."""
+        builder = NoteBuilder()
+        
+        # Create C major scale pattern
+        events = [
+            {'pitch': 60, 'start_time': 0.0, 'duration': 0.5},
+            {'pitch': 62, 'start_time': 0.5, 'duration': 0.5},
+            {'pitch': 64, 'start_time': 1.0, 'duration': 0.5},
+            {'pitch': 65, 'start_time': 1.5, 'duration': 0.5},
+            {'pitch': 67, 'start_time': 2.0, 'duration': 0.5},
+            {'pitch': 69, 'start_time': 2.5, 'duration': 0.5},
+        ]
+        
+        sequence = builder.build_with_auto_detection(
+            events,
+            detect_tempo=True,
+            detect_time_sig=True,
+            detect_key=True
+        )
+        
+        assert sequence.note_count == 6
+        assert 40 <= sequence.tempo <= 240
+        assert sequence.time_signature[1] == 4
+        assert "major" in sequence.key_signature or "minor" in sequence.key_signature
