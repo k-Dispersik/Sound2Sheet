@@ -8,6 +8,7 @@ from MIDI files using FluidSynth Python bindings.
 from typing import Optional, Union, List
 from pathlib import Path
 import logging
+import subprocess
 import numpy as np
 import soundfile as sf
 
@@ -82,8 +83,6 @@ class AudioSynthesizer:
         
         # Initialize FluidSynth
         self.fs = FluidSynth(sound_font=str(self.soundfont_path), sample_rate=self.sample_rate)
-        
-        self.logger.info(f"AudioSynthesizer initialized with soundfont: {self.soundfont_path.name}")
     
     def synthesize(
         self,
@@ -115,11 +114,14 @@ class AudioSynthesizer:
         # Create output directory if needed
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        self.logger.info(f"Synthesizing {midi_path.name} -> {output_path.name}")
-        
         try:
-            # Synthesize MIDI to WAV using FluidSynth
-            self.fs.midi_to_audio(str(midi_path), str(output_path))
+            # Synthesize MIDI to WAV using FluidSynth (suppress output)
+            result = subprocess.run(
+                ['fluidsynth', '-ni', str(self.soundfont_path), str(midi_path), '-F', str(output_path), '-r', str(self.sample_rate)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
             
         except Exception as e:
             raise RuntimeError(f"FluidSynth synthesis failed: {e}")
@@ -212,15 +214,11 @@ class AudioSynthesizer:
             try:
                 self.synthesize(midi_path, output_path, normalize)
                 synthesized_files.append(output_path)
-                
-                if (i + 1) % 10 == 0:
-                    self.logger.info(f"Synthesized {i + 1}/{len(midi_files)} files")
                     
             except Exception as e:
                 self.logger.error(f"Failed to synthesize {midi_path.name}: {e}")
                 continue
         
-        self.logger.info(f"Batch synthesis complete: {len(synthesized_files)}/{len(midi_files)} files")
         return synthesized_files
     
     def get_audio_info(self, audio_path: Union[str, Path]) -> dict:

@@ -169,17 +169,6 @@ class MIDIGenerator:
             config: MIDI generation configuration. If None, uses defaults.
         """
         self.config = config or MIDIConfig()
-        self.logger = logging.getLogger(__name__)
-        
-        # Configure logging if not already configured
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
         
         # Set random seed for reproducibility if needed
         self._rng = np.random.default_rng()
@@ -194,8 +183,6 @@ class MIDIGenerator:
         Returns:
             MIDIFile object containing the generated music
         """
-        self.logger.info(f"Generating MIDI with {self.config.complexity.value} complexity")
-        
         # Create MIDI file with 2 tracks (melody and chords)
         num_tracks = 2 if self.config.include_chords and self.config.include_melody else 1
         midi_file = MIDIFile(num_tracks)
@@ -209,14 +196,12 @@ class MIDIGenerator:
         
         # Generate chord progression
         if self.config.include_chords:
-            self.logger.debug("Generating chord progression")
             chord_progression = self._generate_chord_progression()
             self._add_chords_to_midi(midi_file, track_num, chord_progression)
             track_num += 1
         
         # Generate melody
         if self.config.include_melody:
-            self.logger.debug("Generating melody")
             melody = self._generate_melody()
             self._add_melody_to_midi(midi_file, track_num, melody)
         
@@ -227,8 +212,6 @@ class MIDIGenerator:
             
             with open(output_path, 'wb') as f:
                 midi_file.writeFile(f)
-            
-            self.logger.info(f"MIDI file saved to {output_path}")
         
         return midi_file
     
@@ -292,7 +275,6 @@ class MIDIGenerator:
             chord = [root_note, third_note, fifth_note]
             chords.append(chord)
         
-        self.logger.debug(f"Generated {len(chords)} chords in octave range {self.config.chord_octave_min}-{self.config.chord_octave_max}")
         return chords
     
     def _generate_melody(self) -> List[Tuple[int, float, float]]:
@@ -364,7 +346,6 @@ class MIDIGenerator:
                 
                 current_time += duration
         
-        self.logger.debug(f"Generated melody with {len(melody)} notes in octave range {self.config.melody_octave_min}-{self.config.melody_octave_max}")
         return melody
     
     def _add_chords_to_midi(
@@ -449,11 +430,7 @@ class MIDIGenerator:
             output_path = output_dir / f"{prefix}_{i:04d}.mid"
             self.generate(output_path)
             generated_files.append(output_path)
-            
-            if (i + 1) % 10 == 0:
-                self.logger.info(f"Generated {i + 1}/{num_files} MIDI files")
         
-        self.logger.info(f"Batch generation complete: {len(generated_files)} files")
         return generated_files
     
     def _randomize_config(self) -> None:

@@ -113,27 +113,34 @@ def cleanup_training_data(dataset_dir: Path, keep_manifests: bool = True):
     
     logger.info(f"Cleaning up training data from: {dataset_dir}")
     
+    total_audio = 0
+    total_midi = 0
+    total_size = 0
+    
     # Remove audio and MIDI files
     for split in ['train', 'val', 'test']:
         audio_dir = dataset_dir / split / 'audio'
         midi_dir = dataset_dir / split / 'midi'
         
         if audio_dir.exists():
-            file_count = len(list(audio_dir.glob('*.wav')))
+            files = list(audio_dir.glob('*.wav'))
+            for f in files:
+                total_size += f.stat().st_size
+            total_audio += len(files)
             shutil.rmtree(audio_dir)
-            logger.info(f"  Removed {file_count} audio files from {split}/")
         
         if midi_dir.exists():
-            file_count = len(list(midi_dir.glob('*.mid')))
+            files = list(midi_dir.glob('*.mid'))
+            for f in files:
+                total_size += f.stat().st_size
+            total_midi += len(files)
             shutil.rmtree(midi_dir)
-            logger.info(f"  Removed {file_count} MIDI files from {split}/")
     
     # Optionally remove manifests
     if not keep_manifests:
         metadata_dir = dataset_dir / 'metadata'
         if metadata_dir.exists():
             shutil.rmtree(metadata_dir)
-            logger.info(f"  Removed manifest files")
     
     # Remove empty directories
     for split in ['train', 'val', 'test']:
@@ -141,7 +148,9 @@ def cleanup_training_data(dataset_dir: Path, keep_manifests: bool = True):
         if split_dir.exists() and not any(split_dir.iterdir()):
             split_dir.rmdir()
     
-    logger.info(f"✓ Cleanup completed")
+    # Log summary
+    size_mb = total_size / (1024 * 1024)
+    logger.info(f"✓ Cleanup completed: {total_audio} audio + {total_midi} MIDI files ({size_mb:.1f} MB freed)")
 
 
 def generate_dataset(config: PipelineConfig) -> Dict[str, Path]:

@@ -183,10 +183,12 @@ class DatasetGenerator:
         generate_audio: bool
     ) -> None:
         """Generate samples for a specific split."""
-        self.logger.info(f"Generating {split} split: {size} samples")
-        
         midi_dir = dataset_dir / split / 'midi'
         audio_dir = dataset_dir / split / 'audio'
+        
+        total_audio_size = 0
+        total_midi_size = 0
+        success_count = 0
         
         for i in range(size):
             # Determine complexity based on distribution
@@ -201,6 +203,8 @@ class DatasetGenerator:
             midi_path = midi_dir / f"{sample_id}.mid"
             
             self.midi_generator.generate(midi_path)
+            if midi_path.exists():
+                total_midi_size += midi_path.stat().st_size
             
             # Synthesize audio if requested
             audio_path = audio_dir / f"{sample_id}.{self.config.audio_format}"
@@ -210,6 +214,8 @@ class DatasetGenerator:
                 try:
                     audio = self.audio_synthesizer.synthesize(midi_path, audio_path)
                     duration = len(audio) / self.config.sample_rate
+                    if audio_path.exists():
+                        total_audio_size += audio_path.stat().st_size
                 except Exception as e:
                     self.logger.error(f"Failed to synthesize {sample_id}: {e}")
                     continue
@@ -229,9 +235,12 @@ class DatasetGenerator:
             )
             
             self.samples.append(sample)
-            
-            if (i + 1) % 50 == 0:
-                self.logger.info(f"  Generated {i + 1}/{size} samples")
+            success_count += 1
+        
+        # Log summary
+        audio_mb = total_audio_size / (1024 * 1024)
+        midi_kb = total_midi_size / 1024
+        self.logger.info(f"✓ {split}: {success_count} samples, {audio_mb:.1f} MB audio + {midi_kb:.1f} KB MIDI")
     
     def _sample_complexity(self) -> ComplexityLevel:
         """Sample complexity level based on distribution."""

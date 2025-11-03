@@ -141,8 +141,6 @@ class AudioProcessor:
             self.logger.error(f"Audio file validation failed: {file_path}")
             raise FileNotFoundError(f"Audio file not found or unsupported format: {file_path}")
         
-        self.logger.info(f"Loading audio file: {file_path}")
-        
         try:
             file_path = Path(file_path)
             
@@ -178,7 +176,6 @@ class AudioProcessor:
                         dtype=np.float32
                     )
             
-            self.logger.info(f"Successfully loaded audio: {len(audio)} samples, {len(audio)/self.config.sample_rate:.2f}s")
             return audio
             
         except Exception as e:
