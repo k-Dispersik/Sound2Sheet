@@ -187,12 +187,13 @@ class Trainer:
                 f"LR: {current_lr:.2e}"
             )
             
-            # Save checkpoint
-            train_loader_len = len(self.train_loader) if self.train_loader else 1
-            if train_loader_len > 0 and (epoch + 1) % (self.config.save_steps // train_loader_len) == 0:
+            # Save checkpoint periodically (if save_every_n_epochs > 0)
+            save_every = getattr(self.config, 'save_every_n_epochs', 0)
+            if save_every > 0 and (epoch + 1) % save_every == 0:
                 self._save_checkpoint(f"checkpoint_epoch_{epoch + 1}.pt")
+                self.logger.info(f"Checkpoint saved at epoch {epoch + 1}")
             
-            # Check for improvement
+            # Check for improvement and save best model
             if val_loss < self.best_val_loss - self.config.early_stopping_threshold:
                 self.best_val_loss = val_loss
                 self.epochs_without_improvement = 0

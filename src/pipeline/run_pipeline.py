@@ -156,12 +156,60 @@ def cleanup_training_data(dataset_dir: Path, keep_manifests: bool = True):
 def generate_dataset(config: PipelineConfig) -> Dict[str, Path]:
     """Generate synthetic dataset with MIDI and optionally audio.
     
+    If use_existing_dataset is True, loads existing dataset instead of generating.
+    
     Returns:
         Dictionary with paths to train/val/test manifests
     """
     logger.info("=" * 80)
-    logger.info("STEP 1: Dataset Generation")
+    logger.info("STEP 1: Dataset Preparation")
     logger.info("=" * 80)
+    
+    # Check if we should use existing dataset
+    if config.dataset.use_existing_dataset:
+        if not config.dataset.existing_dataset_path:
+            raise ValueError("use_existing_dataset is True but existing_dataset_path is not provided!")
+        
+        dataset_dir = Path(config.dataset.existing_dataset_path)
+        if not dataset_dir.exists():
+            raise FileNotFoundError(f"Dataset directory not found: {dataset_dir}")
+        
+        logger.info(f"Using existing dataset from: {dataset_dir}")
+        
+        # Build manifest paths
+        manifests = {
+            'train': dataset_dir / 'metadata' / 'train_manifest.json',
+            'val': dataset_dir / 'metadata' / 'val_manifest.json',
+            'test': dataset_dir / 'metadata' / 'test_manifest.json'
+        }
+        
+        # Verify manifests exist
+        for split, manifest_path in manifests.items():
+            if not manifest_path.exists():
+                raise FileNotFoundError(f"{split} manifest not found: {manifest_path}")
+        
+        # Count samples from manifests
+        import json
+        sample_counts = {}
+        for split, manifest_path in manifests.items():
+            with open(manifest_path, 'r') as f:
+                data = json.load(f)
+                # Manifest is a list of samples
+                sample_counts[split] = len(data) if isinstance(data, list) else len(data.get('samples', []))
+        
+        logger.info(f"✓ Loaded existing dataset:")
+        logger.info(f"  Train samples: {sample_counts['train']}")
+        logger.info(f"  Val samples: {sample_counts['val']}")
+        logger.info(f"  Test samples: {sample_counts['test']}")
+        logger.info(f"  Total: {sum(sample_counts.values())} samples")
+        
+        # Update config to use this dataset
+        config.dataset.output_dir = str(dataset_dir)
+        
+        return manifests
+    
+    # Otherwise, generate new dataset
+    logger.info("Generating new dataset...")
     
     # Create dataset configuration using DatasetConfig from dataset module
     from src.dataset import DatasetConfig as DatasetGenConfig
@@ -269,12 +317,28 @@ def train_model(config: PipelineConfig, model_config: ModelConfigClass,
                 resume_from: Optional[str] = None) -> tuple:
     """Train the Sound2Sheet model.
     
+    Args:
+        config: Pipeline configuration
+        model_config: Model configuration
+        training_config: Training configuration
+        data_config: Data configuration
+        resume_from: Optional path to checkpoint to resume from.
+                     If None, will check training_config.resume_checkpoint
+    
     Returns:
         Tuple of (model, trainer, history)
     """
     logger.info("=" * 80)
     logger.info("STEP 2: Model Training")
     logger.info("=" * 80)
+    
+    # Determine resume checkpoint
+    if resume_from is None:
+        resume_from = training_config.resume_checkpoint
+    
+    # Set PyTorch CUDA allocator to reduce fragmentation
+    import os
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
     
     # Optionally cap CUDA memory per process to reduce GPU pressure/temperature
     if model_config.device.startswith('cuda') and torch.cuda.is_available():
@@ -283,7 +347,7 @@ def train_model(config: PipelineConfig, model_config: ModelConfigClass,
             try:
                 if hasattr(torch.cuda, 'set_per_process_memory_fraction'):
                     torch.cuda.set_per_process_memory_fraction(float(frac), torch.cuda.current_device())
-                    logger.info(f"Set CUDA per-process memory fraction to {frac}")
+                    logger.info(f"✓ GPU memory capped at {int(frac*100)}% ({frac * torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB)")
                 else:
                     logger.info("torch.cuda.set_per_process_memory_fraction not available in this torch build; skipping GPU memory cap")
             except Exception as e:
@@ -325,10 +389,19 @@ def train_model(config: PipelineConfig, model_config: ModelConfigClass,
     # Resume from checkpoint if specified
     if resume_from:
         logger.info(f"Resuming from checkpoint: {resume_from}")
-        trainer.load_checkpoint(resume_from)
+        
+        # Check if checkpoint exists
+        checkpoint_path = Path(resume_from)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        
+        trainer.load_checkpoint(str(checkpoint_path))
+        logger.info(f"✓ Successfully loaded checkpoint from epoch {trainer.current_epoch}")
     
     # Train
     logger.info(f"Starting training for {training_config.num_epochs} epochs...")
+    if resume_from:
+        logger.info(f"  Resuming from epoch: {trainer.current_epoch + 1}")
     logger.info(f"  Batch size: {training_config.batch_size}")
     logger.info(f"  Learning rate: {training_config.learning_rate}")
     logger.info(f"  Device: {model_config.device}")
@@ -716,23 +789,38 @@ def run_pipeline(config: PipelineConfig):
     set_seed(getattr(config, 'seed', 42))
     experiment_dir = setup_directories(config)
     
-    # Step 1: Generate dataset (temporary)
+    # Step 1: Generate dataset (temporary) or load existing
     manifests = generate_dataset(config)
     dataset_dir = Path(config.dataset.output_dir)
     
     # Step 2: Train model
     model_config, training_config, data_config = create_model_configs(config, manifests)
     
-    resume_from = getattr(config, 'resume_checkpoint', None)
+    # Handle resume checkpoint
+    resume_from = getattr(config, 'resume_checkpoint', None) or training_config.resume_checkpoint
+    
+    # If resume_from_epoch is specified, construct checkpoint path
+    resume_from_epoch = getattr(config, 'resume_from_epoch', None)
+    if resume_from_epoch is not None and resume_from is None:
+        checkpoint_dir = Path(training_config.checkpoint_dir)
+        resume_from = checkpoint_dir / f"checkpoint_epoch_{resume_from_epoch}.pt"
+        logger.info(f"Constructed checkpoint path from epoch {resume_from_epoch}: {resume_from}")
+    
     model, trainer, history = train_model(
         config, model_config, training_config, data_config, resume_from
     )
     
     # Clean up training data immediately after training
-    logger.info("=" * 80)
-    logger.info("Cleaning up temporary training data...")
-    logger.info("=" * 80)
-    cleanup_training_data(dataset_dir, keep_manifests=True)
+    # Only if we generated it (not if using existing dataset)
+    if not config.dataset.use_existing_dataset:
+        logger.info("=" * 80)
+        logger.info("Cleaning up temporary training data...")
+        logger.info("=" * 80)
+        cleanup_training_data(dataset_dir, keep_manifests=True)
+    else:
+        logger.info("=" * 80)
+        logger.info("Skipping cleanup (using existing dataset)")
+        logger.info("=" * 80)
     
     # Save final model
     save_final_model(model, config, history)

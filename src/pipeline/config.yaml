@@ -2,7 +2,12 @@
 
 # Dataset Generation
 dataset:
-  samples: 5000  # Total samples to generate (5000 for serious training)
+  # If you want to use an existing dataset instead of generating a new one:
+  # Set use_existing_dataset: true and provide existing_dataset_path
+  use_existing_dataset: false  # Set to true to skip dataset generation
+  existing_dataset_path: null  # Path to existing dataset
+  
+  samples: 5000  # Total samples to generate
   complexity: "medium"  # simple, medium, complex (maps to beginner, intermediate, advanced)
   min_notes: 10
   max_notes: 100
@@ -46,18 +51,23 @@ model:
 
 # Training Configuration
 training:
-  batch_size: 16  # Safe for 6GB VRAM (RTX 4050)
+  # Resume training from checkpoint (optional)
+  # Set to checkpoint path to continue training from that point
+  # Example: "results/2025-11-04/production_5k_frozen/checkpoints/checkpoint_epoch_50.pt"
+  resume_checkpoint: null
+  
+  batch_size: 8  # Reduced from 16 for 6GB VRAM (RTX 4050)
   num_epochs: 100  # More epochs for serious training
   learning_rate: 0.0001
   weight_decay: 0.01
   warmup_steps: 1000  # Longer warmup for stability
   max_grad_norm: 1.0
   use_mixed_precision: true
-  gradient_accumulation_steps: 4  # Effective batch size = 16 * 4 = 64
+  gradient_accumulation_steps: 8  # Effective batch size = 8 * 8 = 64
   num_workers: 4
   # Optionally cap the fraction of GPU memory used by this process (0.0-1.0)
-  # Example: 0.5 to limit to ~50% of available GPU memory
-  gpu_memory_fraction: 0.5
+  # 0.45 = ~45% to leave buffer for memory fragmentation
+  gpu_memory_fraction: 0.90
   
   # Learning rate schedule
   lr_schedule: "cosine"  # linear, cosine, constant
@@ -66,10 +76,10 @@ training:
   early_stopping_patience: 15  # More patience for better convergence
   early_stopping_min_delta: 0.0005  # More sensitive threshold
   
-  # Checkpointing
+  # Checkpointing (save only best and final models to save disk space)
   checkpoint_dir: "models/checkpoints"
-  save_every_n_epochs: 5
-  keep_last_n_checkpoints: 5  # Keep more checkpoints for analysis
+  save_every_n_epochs: 0  # 0 = don't save intermediate checkpoints, only best + final
+  keep_last_n_checkpoints: 2  # Keep only best_model.pt and final_model.pt
   
   # Logging
   log_dir: "logs"

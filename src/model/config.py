@@ -74,7 +74,8 @@ class TrainingConfig:
     num_cycles: float = 0.5  # For cosine schedule
     
     # Checkpointing
-    save_steps: int = 500
+    save_steps: int = 500  # Deprecated: use save_every_n_epochs instead
+    save_every_n_epochs: int = 0  # 0 = don't save intermediate, only best + final
     save_total_limit: int = 3
     checkpoint_dir: Path = Path("checkpoints")
     
@@ -96,8 +97,8 @@ class TrainingConfig:
     # If set, pipeline will call torch.cuda.set_per_process_memory_fraction(fraction)
     gpu_memory_fraction: Optional[float] = None
     
-    # Validation
-    val_batch_size: int = 32
+    # Validation - use smaller batch size to avoid OOM
+    val_batch_size: int = 4
     eval_accumulation_steps: Optional[int] = None
     
     # Optimizer and scheduler

@@ -25,6 +25,9 @@ class DatasetConfig:
     output_dir: str = "data/datasets/training_run"
     synthesize_audio: bool = True
     soundfont_path: Optional[str] = None
+    # Use existing dataset instead of generating new one
+    use_existing_dataset: bool = False
+    existing_dataset_path: Optional[str] = None
 
 
 @dataclass
@@ -82,6 +85,7 @@ class TrainingConfig:
     log_every_n_steps: int = 10
     eval_every_n_epochs: int = 1
     gpu_memory_fraction: Optional[float] = None
+    resume_checkpoint: Optional[str] = None  # Path to checkpoint to resume from
 
 
 @dataclass
@@ -221,6 +225,10 @@ Examples:
                               help='Maximum sample duration (seconds)')
     dataset_group.add_argument('--soundfont', type=str,
                               help='Path to soundfont file for audio synthesis')
+    dataset_group.add_argument('--use-existing-dataset', action='store_true',
+                              help='Use existing dataset instead of generating new one')
+    dataset_group.add_argument('--dataset-path', type=str,
+                              help='Path to existing dataset directory (required if --use-existing-dataset)')
     
     # Audio processing
     audio_group = parser.add_argument_group('Audio Processing')
@@ -258,8 +266,10 @@ Examples:
                                help='Disable mixed precision training')
     training_group.add_argument('--num-workers', type=int,
                                help='Number of dataloader workers')
-    training_group.add_argument('--resume', type=str,
-                               help='Resume training from checkpoint')
+    training_group.add_argument('--resume', '--resume-checkpoint', type=str, dest='resume_checkpoint',
+                               help='Resume training from checkpoint (path to .pt file)')
+    training_group.add_argument('--resume-from-epoch', type=int,
+                               help='Specify which epoch checkpoint to resume from (e.g., 50 for checkpoint_epoch_50.pt)')
     
     # Evaluation
     eval_group = parser.add_argument_group('Evaluation')
@@ -299,7 +309,11 @@ def parse_args_to_config() -> PipelineConfig:
     overrides = {}
     
     # Dataset overrides
-    if args.samples is not None or args.complexity is not None:
+    if (args.samples is not None or args.complexity is not None or 
+        args.use_existing_dataset or args.dataset_path is not None or
+        args.min_notes is not None or args.max_notes is not None or
+        args.min_duration is not None or args.max_duration is not None or
+        args.soundfont is not None):
         overrides['dataset'] = {}
         if args.samples is not None:
             overrides['dataset']['samples'] = args.samples
@@ -315,6 +329,10 @@ def parse_args_to_config() -> PipelineConfig:
             overrides['dataset']['max_duration'] = args.max_duration
         if args.soundfont is not None:
             overrides['dataset']['soundfont_path'] = args.soundfont
+        if args.use_existing_dataset:
+            overrides['dataset']['use_existing_dataset'] = True
+        if args.dataset_path is not None:
+            overrides['dataset']['existing_dataset_path'] = args.dataset_path
     
     # Audio overrides
     if args.sample_rate is not None or args.n_mels is not None or args.no_augmentation:
@@ -358,6 +376,8 @@ def parse_args_to_config() -> PipelineConfig:
         training_overrides['checkpoint_dir'] = args.checkpoint_dir
     if args.log_dir is not None:
         training_overrides['log_dir'] = args.log_dir
+    if args.resume_checkpoint is not None:
+        training_overrides['resume_checkpoint'] = args.resume_checkpoint
     
     if training_overrides:
         overrides['training'] = training_overrides
@@ -383,7 +403,8 @@ def parse_args_to_config() -> PipelineConfig:
     # Store additional args
     config.experiment_name = args.name if args.name else 'test_run'
     config.seed = args.seed
-    config.resume_checkpoint = args.resume
+    config.resume_checkpoint = args.resume_checkpoint if hasattr(args, 'resume_checkpoint') else args.resume if hasattr(args, 'resume') else None
+    config.resume_from_epoch = args.resume_from_epoch if hasattr(args, 'resume_from_epoch') else None
     config.eval_only = args.eval_only
     config.eval_model_path = args.model_path
     
