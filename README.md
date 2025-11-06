@@ -1,26 +1,34 @@
 # Sound2Sheet
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-531%20passing-brightgreen.svg)](tests/)
-
 AI-powered music transcription system that converts piano audio recordings into structured musical notation.
 
 ## Version
-Current version: **0.5.0**
+Current version: **0.6.0**
 
 ## 🎹 Overview
 
 Sound2Sheet is a comprehensive machine learning pipeline for automatic music transcription. It processes piano audio and generates accurate musical notation with support for multiple output formats (JSON, MIDI, MusicXML).
 
 ### Key Features
-- 🎵 **Audio Processing**: Multi-format support, noise augmentation, mel-spectrogram generation
-- 🎼 **Dataset Generation**: Synthetic MIDI creation and audio synthesis
-- 🧠 **Deep Learning**: AST-based transformer model for transcription
-- 📝 **Notation Export**: JSON, MIDI, and MusicXML output formats
-- 📊 **Evaluation System**: Comprehensive metrics and visualization tools
+- Audio Processing: Multi-format support, noise augmentation, mel-spectrogram generation
+- Dataset Generation: Synthetic MIDI creation and audio synthesis
+- Deep Learning: AST-based transformer model for transcription
+- Notation Export: JSON, MIDI, and MusicXML output formats
+- Evaluation System: Comprehensive metrics and visualization tools
+- Jupyter Notebook: Training pipeline for cloud environments
 
-## Quick Start
+## Quick Start Options
+
+### Option 1: Jupyter Notebook (Cloud Training)
+
+**For cloud environments (Google Colab, Kaggle, etc.)**
+
+1. Upload `Sound2Sheet_Training_Pipeline.ipynb` to your environment
+2. Enable GPU if available
+3. Execute cells in order
+4. Download trained model checkpoints
+
+### Option 2: Local Installation
 
 ### Installation
 
@@ -136,12 +144,25 @@ Each module has comprehensive documentation with architecture details, usage exa
 - **[Evaluation System](src/evaluation/README.md)** - Metrics calculation, batch evaluation, and visualization
 
 ### Additional Documentation
-- **[Product Requirements](spec/PRD.txt)** - Complete feature specifications
-- **[TODO List](spec/docs/TODO_LIST.md)** - Development progress and roadmap
-- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute
 - **[Changelog](CHANGELOG.md)** - Version history and changes
 
 ## 🏗️ Architecture
+
+### System Overview
+
+```
+Audio Input → Preprocessing → AST Encoder → Transformer Decoder → Note Predictions → Export (JSON/MIDI/MusicXML)
+```
+
+### Pipeline Components
+
+1. **Audio Processing**: Load, normalize, augment, and convert to mel-spectrograms
+2. **Model**: AST-based encoder + custom transformer decoder (134M params)
+3. **Training**: Mixed precision, gradient accumulation, checkpoint management
+4. **Conversion**: Tempo detection, quantization, time signature detection
+5. **Export**: JSON, MIDI, MusicXML with expression markers
+
+### Project Structure
 
 ```
 Sound2Sheet/
@@ -174,6 +195,7 @@ Sound2Sheet/
 │       ├── run_pipeline.py
 │       ├── config_parser.py
 │       └── README.md
+├── Sound2Sheet_Training_Pipeline.ipynb  # Jupyter notebook for cloud training
 ├── results/               # Training results (organized by date)
 │   ├── {YYYY-MM-DD}/
 │   │   └── {experiment_name}/
@@ -203,7 +225,7 @@ python -m src.pipeline.run_pipeline \
 
 # Results saved to: results/2025-11-03/my_experiment/
 # ✅ Model, checkpoints, visualizations, reports saved
-# ❌ Audio/MIDI training files automatically deleted (saves GB of space!)
+# ❌ Audio/MIDI training files automatically deleted
 ```
 
 See **[Pipeline Documentation](src/pipeline/README.md)** and **[Results Structure](results/README.md)** for details.
@@ -250,62 +272,6 @@ pytest tests/evaluation/ -v
 | Evaluation | 53 | 100% |
 | **Total** | **531** | **93%** |
 
-## 📊 Project Status
-
-### ✅ Completed Features
-
-#### Feature 1: Audio Processing
-- Multi-format audio support (WAV, MP3, FLAC, OGG, M4A)
-- Noise augmentation (white, pink, brown, ambient, hum)
-- Mel-spectrogram generation with configurable parameters
-- Audio visualization tools
-- **88 tests passing**
-
-#### Feature 2: Dataset Generation
-- Realistic MIDI generation with 3 complexity levels
-- Audio synthesis using FluidSynth
-- Train/validation/test split management
-- Metadata and statistics generation
-- **40 tests passing**
-
-#### Feature 3: Model Training Pipeline
-- AST-based encoder with freezing support
-- Custom transformer decoder
-- Mixed precision training (AMP)
-- Learning rate scheduling and early stopping
-- Checkpoint management and history logging
-- **95 tests passing**
-
-#### Feature 4: Notation Converter
-- Note and NoteSequence classes
-- MIDI export functionality
-- MusicXML export with full notation support
-- Tied notes and expression markers
-- Performance benchmarking utilities
-- **329 tests passing**
-
-#### Feature 5: Evaluation System
-- Comprehensive metrics (accuracy, F1, precision, recall)
-- Batch evaluation with progress tracking
-- CSV and JSON report generation
-- Visualization dashboard (6 plot types)
-- Command-line interface
-- **53 tests passing**
-
-### 🚧 In Progress
-
-#### Feature 6: Model Optimization
-- Training on larger datasets (1000+ samples)
-- End-to-end transcription quality evaluation
-- Hyperparameter tuning based on evaluation metrics
-
-### 📋 Planned Features
-
-- **Feature 7**: REST API for transcription services
-- **Feature 8**: Web interface for easy access
-- Real piano recording support
-- Multi-instrument transcription
-
 ## 🔧 Configuration
 
 The system uses YAML configuration files for flexible setup:
@@ -333,56 +299,6 @@ training:
   early_stopping_patience: 10
 ```
 
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Write tests for your changes
-4. Ensure all tests pass (`pytest`)
-5. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-6. Push to the branch (`git push origin feature/AmazingFeature`)
-7. Open a Pull Request
-
-### Development Workflow
-
-This project follows **Git Flow**:
-- `main`: Production releases
-- `develop`: Integration branch
-- `feature/*`: Feature development branches
-- `bugfix/*`: Bug fix branches
-- `release/*`: Release preparation branches
-
-All code changes must include appropriate tests and documentation.
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-### MIT License Summary
-- ✅ Commercial use allowed
-- ✅ Modification allowed
-- ✅ Distribution allowed
-- ✅ Private use allowed
-- ⚠️ No warranty provided
-- ⚠️ No liability accepted
-
-## 📧 Contact
-
-**Volodymyr** - Project Maintainer
-
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Project Link: [https://github.com/yourusername/Sound2Sheet](https://github.com/yourusername/Sound2Sheet)
-
-## 🙏 Acknowledgments
-
-- **Hugging Face Transformers** - AST model implementation
-- **librosa** - Audio processing utilities
-- **PyTorch** - Deep learning framework
-- **FluidSynth** - MIDI audio synthesis
-- **music21** - Music theory utilities (inspiration)
-
----
-
-**Made with ❤️ and Python**
