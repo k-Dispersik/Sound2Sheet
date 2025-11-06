@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.6.0] - 2025-11-06
+### Added
+- **Jupyter Notebook Training Pipeline** (`Sound2Sheet_Training_Pipeline.ipynb`)
+  - 10-step training workflow for cloud environments
+  - GPU detection and automatic configuration
+  - Dataset generation with configurable parameters
+  - Model training with progress tracking
+  - Training visualization (loss curves, accuracy)
+  - Evaluation on test set with comprehensive metrics
+  - Inference testing on sample data
+  - Checkpoint saving (best and final models)
+  - Works in Google Colab, Kaggle, and JupyterLab
+
+### Changed
+- Simplified notebook structure: focused on training pipeline
+- Removed external storage dependencies
+- All checkpoints stored locally in notebook environment
+- Updated documentation to reflect Jupyter notebook support
+
 ## [0.5.0] - 2025-11-03
 ### Added
 - **Feature 5: Evaluation System (Complete)**
