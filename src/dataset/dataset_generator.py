@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import random
+from tqdm import tqdm
 
 from .midi_generator import MIDIGenerator, MIDIConfig, ComplexityLevel
 from .audio_synthesizer import AudioSynthesizer
@@ -127,16 +128,11 @@ class DatasetGenerator:
         Returns:
             Path to generated dataset directory
         """
-        self.logger.info(f"Generating dataset: {self.config.name} v{self.config.version}")
-        self.logger.info(f"Total samples: {self.config.total_samples}")
-        
         # Create dataset directory structure
         dataset_dir = self._create_directory_structure()
         
         # Calculate split sizes
         train_size, val_size, test_size = self._calculate_splits()
-        
-        self.logger.info(f"Split: train={train_size}, val={val_size}, test={test_size}")
         
         # Generate samples for each split
         self._generate_split("train", train_size, dataset_dir, generate_audio)
@@ -146,14 +142,12 @@ class DatasetGenerator:
         # Generate metadata
         self._generate_metadata(dataset_dir)
         
-        self.logger.info(f"Dataset generation complete: {dataset_dir}")
         return dataset_dir
     
     def _create_directory_structure(self) -> Path:
         """Create hierarchical directory structure for dataset."""
-        # Create base directory with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dataset_dir = self.config.output_dir / f"{self.config.name}_v{self.config.version}_{timestamp}"
+        # Create base directory directly (no timestamp subdirectory)
+        dataset_dir = self.config.output_dir
         
         # Create subdirectories
         for split in ['train', 'val', 'test']:
@@ -190,7 +184,10 @@ class DatasetGenerator:
         total_midi_size = 0
         success_count = 0
         
-        for i in range(size):
+        # Add progress bar
+        pbar = tqdm(range(size), desc=f"Generating {split}", unit="sample")
+        
+        for i in pbar:
             # Determine complexity based on distribution
             complexity = self._sample_complexity()
             
@@ -236,11 +233,14 @@ class DatasetGenerator:
             
             self.samples.append(sample)
             success_count += 1
+            
+            # Update progress bar with current stats
+            pbar.set_postfix({
+                'complexity': complexity.value[:3],
+                'tempo': midi_config.tempo
+            })
         
-        # Log summary
-        audio_mb = total_audio_size / (1024 * 1024)
-        midi_kb = total_midi_size / 1024
-        self.logger.info(f"✓ {split}: {success_count} samples, {audio_mb:.1f} MB audio + {midi_kb:.1f} KB MIDI")
+        pbar.close()
     
     def _sample_complexity(self) -> ComplexityLevel:
         """Sample complexity level based on distribution."""
@@ -303,8 +303,6 @@ class DatasetGenerator:
             
             with open(metadata_dir / f'{split}_manifest.json', 'w') as f:
                 json.dump(split_data, f, indent=2)
-        
-        self.logger.info(f"Generated metadata files in {metadata_dir}")
     
     def _calculate_statistics(self) -> Dict:
         """Calculate dataset statistics."""
