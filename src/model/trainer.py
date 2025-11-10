@@ -105,6 +105,7 @@ class Trainer:
         # History
         self.train_losses = []
         self.val_losses = []
+        self.val_accuracies = []
         self.learning_rates = []
         
         # Resume from checkpoint if provided
@@ -173,6 +174,7 @@ class Trainer:
             # Validation epoch
             val_loss, val_metrics = self._validate_epoch()
             self.val_losses.append(val_loss)
+            self.val_accuracies.append(val_metrics['accuracy'])
             
             # Learning rate
             current_lr = self.optimizer.param_groups[0]['lr']
@@ -220,6 +222,7 @@ class Trainer:
         return {
             'train_losses': self.train_losses,
             'val_losses': self.val_losses,
+            'val_accuracies': self.val_accuracies,
             'learning_rates': self.learning_rates,
             'best_val_loss': self.best_val_loss
         }
@@ -410,7 +413,8 @@ class Trainer:
             global_step=self.global_step,
             best_val_loss=self.best_val_loss,
             train_losses=self.train_losses,
-            val_losses=self.val_losses
+            val_losses=self.val_losses,
+            val_accuracies=self.val_accuracies
         )
         
         # Remove old checkpoints if exceeding limit
@@ -437,6 +441,7 @@ class Trainer:
         self.best_val_loss = checkpoint.get('best_val_loss', float('inf'))
         self.train_losses = checkpoint.get('train_losses', [])
         self.val_losses = checkpoint.get('val_losses', [])
+        self.val_accuracies = checkpoint.get('val_accuracies', [])
         
         self.logger.info(f"Resumed from checkpoint: {checkpoint_path}")
         self.logger.info(f"Starting from epoch {self.current_epoch}")
@@ -446,6 +451,7 @@ class Trainer:
         history = {
             'train_losses': self.train_losses,
             'val_losses': self.val_losses,
+            'val_accuracy': self.val_accuracies,
             'learning_rates': self.learning_rates,
             'best_val_loss': self.best_val_loss,
             'total_epochs': self.current_epoch + 1,
