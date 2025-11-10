@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import random
+from tqdm import tqdm
 
 from .midi_generator import MIDIGenerator, MIDIConfig, ComplexityLevel
 from .audio_synthesizer import AudioSynthesizer
@@ -190,7 +191,10 @@ class DatasetGenerator:
         total_midi_size = 0
         success_count = 0
         
-        for i in range(size):
+        # Add progress bar
+        pbar = tqdm(range(size), desc=f"Generating {split}", unit="sample")
+        
+        for i in pbar:
             # Determine complexity based on distribution
             complexity = self._sample_complexity()
             
@@ -236,6 +240,14 @@ class DatasetGenerator:
             
             self.samples.append(sample)
             success_count += 1
+            
+            # Update progress bar with current stats
+            pbar.set_postfix({
+                'complexity': complexity.value[:3],
+                'tempo': midi_config.tempo
+            })
+        
+        pbar.close()
         
         # Log summary
         audio_mb = total_audio_size / (1024 * 1024)
