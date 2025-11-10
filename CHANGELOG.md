@@ -16,6 +16,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.6.1] - 2025-11-10
+### Added
+- Validation accuracy tracking in Trainer
+  - Added `val_accuracies` list to store accuracy for each epoch
+  - Accuracy now saved to training history JSON
+  - Accuracy included in checkpoint saves for resume support
+
+### Changed
+- **Dataset Generation Improvements**
+  - Removed versioned timestamp subdirectories (e.g., `_v1.0.0_20251110_165359`)
+  - Datasets now created directly in specified output directory
+  - Added tqdm progress bars for dataset generation
+  - Progress bars show current complexity and tempo during generation
+  - Streamlined logging output:
+    - Removed redundant initialization messages
+    - Removed per-split completion logs
+    - Single final summary: `✓ Generated N samples: train=X, val=Y, test=Z → path`
+- **Notebook Updates**
+  - Simplified dataset path verification (no versioned directory search)
+  - Updated Step 2 to use direct path assignment
+
+### Fixed
+- Training history now properly saves validation accuracy
+- Dataset directory structure simplified for easier navigation
+
 ## [0.6.0] - 2025-11-06
 ### Added
 - **Jupyter Notebook Training Pipeline** (`Sound2Sheet_Training_Pipeline.ipynb`)
