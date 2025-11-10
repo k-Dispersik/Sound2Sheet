@@ -152,9 +152,8 @@ class DatasetGenerator:
     
     def _create_directory_structure(self) -> Path:
         """Create hierarchical directory structure for dataset."""
-        # Create base directory with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dataset_dir = self.config.output_dir / f"{self.config.name}_v{self.config.version}_{timestamp}"
+        # Create base directory directly (no timestamp subdirectory)
+        dataset_dir = self.config.output_dir
         
         # Create subdirectories
         for split in ['train', 'val', 'test']:
