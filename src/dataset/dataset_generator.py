@@ -128,16 +128,11 @@ class DatasetGenerator:
         Returns:
             Path to generated dataset directory
         """
-        self.logger.info(f"Generating dataset: {self.config.name} v{self.config.version}")
-        self.logger.info(f"Total samples: {self.config.total_samples}")
-        
         # Create dataset directory structure
         dataset_dir = self._create_directory_structure()
         
         # Calculate split sizes
         train_size, val_size, test_size = self._calculate_splits()
-        
-        self.logger.info(f"Split: train={train_size}, val={val_size}, test={test_size}")
         
         # Generate samples for each split
         self._generate_split("train", train_size, dataset_dir, generate_audio)
@@ -147,7 +142,6 @@ class DatasetGenerator:
         # Generate metadata
         self._generate_metadata(dataset_dir)
         
-        self.logger.info(f"Dataset generation complete: {dataset_dir}")
         return dataset_dir
     
     def _create_directory_structure(self) -> Path:
@@ -247,11 +241,6 @@ class DatasetGenerator:
             })
         
         pbar.close()
-        
-        # Log summary
-        audio_mb = total_audio_size / (1024 * 1024)
-        midi_kb = total_midi_size / 1024
-        self.logger.info(f"✓ {split}: {success_count} samples, {audio_mb:.1f} MB audio + {midi_kb:.1f} KB MIDI")
     
     def _sample_complexity(self) -> ComplexityLevel:
         """Sample complexity level based on distribution."""
@@ -314,8 +303,6 @@ class DatasetGenerator:
             
             with open(metadata_dir / f'{split}_manifest.json', 'w') as f:
                 json.dump(split_data, f, indent=2)
-        
-        self.logger.info(f"Generated metadata files in {metadata_dir}")
     
     def _calculate_statistics(self) -> Dict:
         """Calculate dataset statistics."""

@@ -45,7 +45,6 @@ def generate_command(args):
             return 1
     
     # Initialize generator
-    print(f"Initializing dataset generator...")
     generator = DatasetGenerator(config)
     
     # Check if audio synthesis is available
@@ -65,22 +64,12 @@ def generate_command(args):
     try:
         dataset_dir = generator.generate(generate_audio=not args.midi_only)
         
-        print(f"\n✓ Dataset generated successfully!")
-        print(f"Location: {dataset_dir}")
-        print(f"Total samples: {len(generator.samples)}")
-        
         # Print split information
         train_count = sum(1 for s in generator.samples if s.split == 'train')
         val_count = sum(1 for s in generator.samples if s.split == 'val')
         test_count = sum(1 for s in generator.samples if s.split == 'test')
         
-        print(f"\nSplits:")
-        print(f"  Train: {train_count} samples")
-        print(f"  Val:   {val_count} samples")
-        print(f"  Test:  {test_count} samples")
-        
-        if not args.midi_only:
-            print(f"\nAudio files: {config.audio_format} @ {config.sample_rate}Hz")
+        print(f"\n✓ Generated {len(generator.samples)} samples: train={train_count}, val={val_count}, test={test_count} → {dataset_dir}")
         
         return 0
         
@@ -234,24 +223,24 @@ def main():
         description="Sound2Sheet Dataset Generator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Generate small dataset with MIDI only
-  %(prog)s generate --samples 100 --name test_dataset --midi-only
+            Examples:
+            # Generate small dataset with MIDI only
+            %(prog)s generate --samples 100 --name test_dataset --midi-only
 
-  # Generate full dataset with audio
-  %(prog)s generate --samples 1000 --name piano_v1
+            # Generate full dataset with audio
+            %(prog)s generate --samples 1000 --name piano_v1
 
-  # Custom split ratios
-  %(prog)s generate --samples 500 --train-ratio 0.8 --val-ratio 0.1 --test-ratio 0.1
+            # Custom split ratios
+            %(prog)s generate --samples 500 --train-ratio 0.8 --val-ratio 0.1 --test-ratio 0.1
 
-  # Custom complexity distribution
-  %(prog)s generate --samples 200 --complexity-dist "beginner:0.5,intermediate:0.3,advanced:0.2"
+            # Custom complexity distribution
+            %(prog)s generate --samples 200 --complexity-dist "beginner:0.5,intermediate:0.3,advanced:0.2"
 
-  # Show dataset information
-  %(prog)s info data/datasets/piano_dataset_v1.0.0_20250101_120000
+            # Show dataset information
+            %(prog)s info data/datasets/piano_dataset_v1.0.0_20250101_120000
 
-  # Validate dataset
-  %(prog)s validate data/datasets/piano_dataset_v1.0.0_20250101_120000
+            # Validate dataset
+            %(prog)s validate data/datasets/piano_dataset_v1.0.0_20250101_120000
         """
     )
     
