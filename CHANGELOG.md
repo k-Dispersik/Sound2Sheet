@@ -16,6 +16,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.6.2] - 2025-11-11
+### Changed
+- **Jupyter Notebook Training Pipeline Updates**
+  - Complete redesign with improved structure and configuration
+  - Increased default samples to 1000 for better training
+  - Increased default epochs to 50 for better convergence
+  - Dataset now stored in `data/datasets/{EXPERIMENT_NAME}` structure
+  - Added versioned directory support for better experiment tracking
+  - Improved model configuration:
+    - Increased decoder layers from 4 to 6
+    - Reduced max_grad_norm to 1.0 for better stability
+    - Added gradient accumulation (4 steps) for larger effective batch size
+    - Set save_every_n_epochs to 0 (only saves best and final)
+  - Enhanced visualization cell:
+    - Added proper history file path (`checkpoints/training_history.json`)
+    - Improved plot formatting with proper labels and legends
+    - Fixed history key names (`train_loss`, `val_loss`, `val_accuracy`)
+  - Added evaluation step with comprehensive metrics
+  - Added inference testing on sample data
+  - Added resume training support (commented example)
+  - Added custom configuration examples
+
+### Fixed
+- Fixed dataset path configuration in notebook (now uses correct `data/datasets/{EXPERIMENT_NAME}` path)
+- Fixed training history visualization to use correct checkpoint directory
+
 ## [0.6.1] - 2025-11-10
 ### Added
 - Validation accuracy tracking in Trainer
