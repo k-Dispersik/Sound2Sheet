@@ -11,46 +11,45 @@ from pathlib import Path
 
 @dataclass
 class ModelConfig:
-    """Configuration for the Sound2Sheet model."""
+    """Configuration for the Sound2Sheet Piano Roll model."""
     
     # Model architecture
     ast_model_name: str = "MIT/ast-finetuned-audioset-10-10-0.4593"
     hidden_size: int = 768
-    num_decoder_layers: int = 6
-    num_attention_heads: int = 8
-    decoder_ffn_dim: int = 2048
     dropout: float = 0.1
     
-    # Vocabulary (88 piano keys + special tokens)
-    vocab_size: int = 92  # 88 keys + <pad>, <sos>, <eos>, <unk>
-    pad_token_id: int = 0
-    sos_token_id: int = 89
-    eos_token_id: int = 90
-    unk_token_id: int = 91
-    
-    # MIDI note range
+    # Piano roll parameters
+    num_piano_keys: int = 88  # Number of piano keys (A0 to C8)
     min_midi_note: int = 21  # A0
     max_midi_note: int = 108  # C8
     
-    # Sequence parameters
-    max_sequence_length: int = 512
-    max_notes_per_sample: int = 256
+    # Frame-level detection parameters
+    frame_duration_ms: float = 10.0  # Duration of each frame in milliseconds (10ms = 100 FPS)
+    classification_threshold: float = 0.5  # Threshold for binary classification
+    
+    # Classification head architecture
+    num_classifier_layers: int = 2  # Number of fully connected layers in classifier head
+    classifier_hidden_dim: int = 512  # Hidden dimension for classifier
+    use_temporal_conv: bool = True  # Use 1D conv for temporal context before classification
+    temporal_conv_kernel: int = 5  # Kernel size for temporal convolution
     
     # Training device
     device: str = "cuda"  # Will auto-detect in code
     
     def __post_init__(self):
         """Validate configuration after initialization."""
-        if self.vocab_size <= 0:
-            raise ValueError(f"vocab_size must be positive, got {self.vocab_size}")
         if self.hidden_size <= 0:
             raise ValueError(f"hidden_size must be positive, got {self.hidden_size}")
         if not 0.0 <= self.dropout <= 1.0:
             raise ValueError(f"dropout must be in [0, 1], got {self.dropout}")
-        if self.num_decoder_layers <= 0:
-            raise ValueError(f"num_decoder_layers must be positive, got {self.num_decoder_layers}")
-        if self.num_attention_heads <= 0:
-            raise ValueError(f"num_attention_heads must be positive, got {self.num_attention_heads}")
+        if self.num_piano_keys != (self.max_midi_note - self.min_midi_note + 1):
+            raise ValueError(f"num_piano_keys must equal max_midi_note - min_midi_note + 1")
+        if self.frame_duration_ms <= 0:
+            raise ValueError(f"frame_duration_ms must be positive, got {self.frame_duration_ms}")
+        if not 0.0 <= self.classification_threshold <= 1.0:
+            raise ValueError(f"classification_threshold must be in [0, 1], got {self.classification_threshold}")
+        if self.num_classifier_layers <= 0:
+            raise ValueError(f"num_classifier_layers must be positive, got {self.num_classifier_layers}")
     
 
 @dataclass
@@ -129,37 +128,38 @@ class TrainingConfig:
 
 @dataclass
 class InferenceConfig:
-    """Configuration for model inference."""
+    """Configuration for Piano Roll inference."""
     
     # Inference parameters
     batch_size: int = 1
-    max_length: int = 1000  # Maximum number of notes to generate
-    
-    # Decoding strategy
-    use_beam_search: bool = False
-    beam_size: int = 5
-    temperature: float = 1.0
-    top_k: int = 0  # 0 = disabled
-    top_p: float = 0.0  # 0 = disabled
+    classification_threshold: float = 0.5  # Threshold for note activation
     
     # Post-processing
-    remove_duplicates: bool = True
-    min_note_duration: float = 0.05  # seconds
-    quantize_timing: bool = True
+    min_note_duration_ms: float = 30.0  # Minimum note duration in milliseconds
+    onset_tolerance_ms: float = 50.0  # Tolerance for merging close onsets
+    use_median_filter: bool = True  # Median filter to smooth predictions
+    median_filter_size: int = 3  # Size of median filter (frames)
+    
+    # Output format
+    output_format: str = "events"  # "events" or "piano_roll"
+    events_include_velocity: bool = False  # Include velocity in events (if False, use default)
+    default_velocity: int = 80  # Default MIDI velocity for notes
     
     # Device
     device: str = "cuda"  # Will auto-detect in code
     
     def __post_init__(self):
         """Validate configuration after initialization."""
-        if self.max_length <= 0:
-            raise ValueError(f"max_length must be positive, got {self.max_length}")
-        if self.temperature <= 0.0:
-            raise ValueError(f"temperature must be positive, got {self.temperature}")
-        if self.use_beam_search and self.beam_size <= 0:
-            raise ValueError(f"beam_size must be positive when beam search is enabled, got {self.beam_size}")
-        if not 0.0 <= self.top_p <= 1.0:
-            raise ValueError(f"top_p must be in [0, 1], got {self.top_p}")
+        if not 0.0 <= self.classification_threshold <= 1.0:
+            raise ValueError(f"classification_threshold must be in [0, 1], got {self.classification_threshold}")
+        if self.min_note_duration_ms < 0:
+            raise ValueError(f"min_note_duration_ms must be non-negative, got {self.min_note_duration_ms}")
+        if self.onset_tolerance_ms < 0:
+            raise ValueError(f"onset_tolerance_ms must be non-negative, got {self.onset_tolerance_ms}")
+        if self.output_format not in ["events", "piano_roll"]:
+            raise ValueError(f"output_format must be 'events' or 'piano_roll', got {self.output_format}")
+        if not 0 <= self.default_velocity <= 127:
+            raise ValueError(f"default_velocity must be in [0, 127], got {self.default_velocity}")
 
 
 @dataclass
