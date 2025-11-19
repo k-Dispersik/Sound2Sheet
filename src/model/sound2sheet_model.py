@@ -1,16 +1,17 @@
 """
 Sound2Sheet main model.
 
-Combines AST encoder and Note decoder for end-to-end transcription.
+Combines AST encoder and Piano Roll classifier for frame-level piano transcription.
 """
 
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, List, TYPE_CHECKING
+from typing import Dict, Optional, List, Tuple, TYPE_CHECKING
 import logging
+import numpy as np
 
 from .config import ModelConfig
-from .ast_model import ASTWrapper, NoteDecoder
+from .ast_model import ASTWrapper, PianoRollClassifier
 
 if TYPE_CHECKING:
     from .config import InferenceConfig
@@ -18,11 +19,11 @@ if TYPE_CHECKING:
 
 class Sound2SheetModel(nn.Module):
     """
-    Main Sound2Sheet model for piano transcription.
+    Main Sound2Sheet model for piano transcription using Piano Roll approach.
     
     Architecture:
         1. AST Encoder: Extracts features from mel-spectrogram
-        2. Note Decoder: Predicts MIDI note sequence
+        2. Piano Roll Classifier: Predicts binary activation for each of 88 keys per frame
     """
     
     def __init__(self, config: ModelConfig, freeze_encoder: bool = False):
@@ -39,88 +40,199 @@ class Sound2SheetModel(nn.Module):
         
         # Initialize components
         self.encoder = ASTWrapper(config, freeze_encoder=freeze_encoder)
-        self.decoder = NoteDecoder(config)
+        self.classifier = PianoRollClassifier(config)
         
-        self.logger.info(f"Initialized Sound2Sheet model")
+        self.logger.info(f"Initialized Sound2Sheet Piano Roll model")
         self.logger.info(f"  Encoder: AST ({config.ast_model_name})")
-        self.logger.info(f"  Decoder: {config.num_decoder_layers} layers")
-        self.logger.info(f"  Vocab size: {config.vocab_size}")
+        self.logger.info(f"  Classifier: {config.num_classifier_layers} layers, {config.num_piano_keys} keys")
+        self.logger.info(f"  Frame duration: {config.frame_duration_ms}ms")
         self.logger.info(f"  Freeze encoder: {freeze_encoder}")
     
     def forward(
         self,
         mel: torch.Tensor,
-        target_notes: torch.Tensor
+        piano_roll: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
         Forward pass through model.
         
         Args:
             mel: Mel-spectrogram [batch, n_mels, time]
-            target_notes: Target notes for teacher forcing [batch, max_notes]
+            piano_roll: Ground truth piano roll [batch, time_frames, num_piano_keys] (optional, for training)
             
         Returns:
-            logits: Note predictions [batch, max_notes, vocab_size]
+            logits: Piano roll predictions [batch, time_frames, num_piano_keys]
         """
         # Encode audio
         encoder_output = self.encoder(mel)  # [batch, enc_seq_len, hidden_size]
         
-        # Decode notes (decoder expects: encoder_hidden_states, target_notes)
-        logits = self.decoder(encoder_output, target_notes)  # [batch, max_notes, vocab_size]
+        # Classify each frame
+        logits = self.classifier(encoder_output)  # [batch, enc_seq_len, num_piano_keys]
         
         return logits
     
-    def generate(
+    def predict(
         self,
         mel: torch.Tensor,
         inference_config: 'InferenceConfig'
-    ) -> List[int]:
+    ) -> Tuple[torch.Tensor, List[Dict]]:
         """
-        Generate note sequence from audio (inference mode).
+        Predict piano roll and extract note events from audio (inference mode).
         
         Args:
             mel: Mel-spectrogram [batch, n_mels, time]
             inference_config: Inference configuration
             
         Returns:
-            Generated note token IDs as list
+            - piano_roll: Binary piano roll [batch, time_frames, num_piano_keys]
+            - events: List of note events per batch item, each event is a dict with:
+                - pitch: MIDI note number (21-108)
+                - onset_time_ms: Note start time in milliseconds
+                - offset_time_ms: Note end time in milliseconds
+                - velocity: MIDI velocity (if included)
         """
         self.eval()
         
         with torch.no_grad():
-            # Encode audio
-            encoder_output = self.encoder(mel)  # [batch, enc_seq_len, hidden_size]
+            # Get logits
+            logits = self.forward(mel)  # [batch, time_frames, num_piano_keys]
             
-            # Autoregressive generation (greedy decoding for now)
-            batch_size = mel.size(0)
-            current_tokens = torch.full(
-                (batch_size, 1),
-                self.config.sos_token_id,
-                dtype=torch.long,
-                device=mel.device
-            )
+            # Apply sigmoid to get probabilities
+            probs = torch.sigmoid(logits)
             
-            max_length = inference_config.max_length
+            # Apply median filter if enabled
+            if inference_config.use_median_filter:
+                probs = self._apply_median_filter(probs, inference_config.median_filter_size)
             
-            for _ in range(max_length):
-                # Decode (decoder expects: encoder_hidden_states, target_notes)
-                logits = self.decoder(encoder_output, current_tokens)  # [batch, seq_len, vocab_size]
-                
-                # Get next token (greedy decoding)
-                next_token_logits = logits[:, -1, :] / inference_config.temperature  # [batch, vocab_size]
-                next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)  # [batch, 1]
-                
-                # Append to sequence
-                current_tokens = torch.cat([current_tokens, next_token], dim=1)
-                
-                # Stop if EOS produced
-                if (next_token == self.config.eos_token_id).all():
-                    break
+            # Threshold to get binary piano roll
+            piano_roll = (probs >= inference_config.classification_threshold).float()
             
-            # Convert to list (remove SOS token)
-            generated_notes = current_tokens[0, 1:].cpu().tolist()  # Take first batch item
+            # Extract note events if requested
+            if inference_config.output_format == "events":
+                events = self._piano_roll_to_events(
+                    piano_roll,
+                    inference_config
+                )
+            else:
+                events = []
         
-        return generated_notes
+        return piano_roll, events
+    
+    def _apply_median_filter(
+        self,
+        probs: torch.Tensor,
+        filter_size: int
+    ) -> torch.Tensor:
+        """
+        Apply median filter along time dimension to smooth predictions.
+        
+        Args:
+            probs: Probabilities [batch, time_frames, num_piano_keys]
+            filter_size: Size of median filter
+            
+        Returns:
+            Smoothed probabilities [batch, time_frames, num_piano_keys]
+        """
+        if filter_size <= 1:
+            return probs
+        
+        # Use unfold to create sliding windows
+        batch_size, time_frames, num_keys = probs.shape
+        
+        # Pad to handle edges
+        padding = filter_size // 2
+        probs_padded = torch.nn.functional.pad(probs, (0, 0, padding, padding), mode='replicate')
+        
+        # Apply median filter per key
+        smoothed = []
+        for b in range(batch_size):
+            batch_smoothed = []
+            for k in range(num_keys):
+                key_probs = probs_padded[b, :, k]  # [time_frames + 2*padding]
+                # Unfold creates windows
+                windows = key_probs.unfold(0, filter_size, 1)  # [time_frames, filter_size]
+                medians = windows.median(dim=1)[0]  # [time_frames]
+                batch_smoothed.append(medians)
+            smoothed.append(torch.stack(batch_smoothed, dim=1))  # [time_frames, num_keys]
+        
+        return torch.stack(smoothed, dim=0)  # [batch, time_frames, num_keys]
+    
+    def _piano_roll_to_events(
+        self,
+        piano_roll: torch.Tensor,
+        inference_config: 'InferenceConfig'
+    ) -> List[List[Dict]]:
+        """
+        Convert binary piano roll to note events.
+        
+        Args:
+            piano_roll: Binary piano roll [batch, time_frames, num_piano_keys]
+            inference_config: Inference configuration
+            
+        Returns:
+            List of note events per batch item
+        """
+        batch_size = piano_roll.shape[0]
+        frame_duration_ms = self.config.frame_duration_ms
+        min_duration_frames = int(inference_config.min_note_duration_ms / frame_duration_ms)
+        
+        all_events = []
+        
+        for b in range(batch_size):
+            batch_events = []
+            roll = piano_roll[b].cpu().numpy()  # [time_frames, num_piano_keys]
+            
+            # Process each key
+            for key_idx in range(self.config.num_piano_keys):
+                key_activations = roll[:, key_idx]  # [time_frames]
+                
+                # Find note on/off transitions
+                # Add padding to detect notes at boundaries
+                padded = np.pad(key_activations, (1, 1), constant_values=0)
+                diff = np.diff(padded)
+                
+                onsets = np.where(diff == 1)[0]  # Frames where note turns on
+                offsets = np.where(diff == -1)[0]  # Frames where note turns off
+                
+                # Match onsets with offsets
+                for onset_frame in onsets:
+                    # Find corresponding offset
+                    matching_offsets = offsets[offsets > onset_frame]
+                    if len(matching_offsets) == 0:
+                        # Note continues till end
+                        offset_frame = len(key_activations)
+                    else:
+                        offset_frame = matching_offsets[0]
+                    
+                    # Check minimum duration
+                    duration_frames = offset_frame - onset_frame
+                    if duration_frames < min_duration_frames:
+                        continue
+                    
+                    # Convert to MIDI note number
+                    midi_note = self.config.min_midi_note + key_idx
+                    
+                    # Convert frames to milliseconds
+                    onset_ms = onset_frame * frame_duration_ms
+                    offset_ms = offset_frame * frame_duration_ms
+                    
+                    # Create event
+                    event = {
+                        'pitch': int(midi_note),
+                        'onset_time_ms': float(onset_ms),
+                        'offset_time_ms': float(offset_ms)
+                    }
+                    
+                    if inference_config.events_include_velocity:
+                        event['velocity'] = inference_config.default_velocity
+                    
+                    batch_events.append(event)
+            
+            # Sort by onset time
+            batch_events.sort(key=lambda x: x['onset_time_ms'])
+            all_events.append(batch_events)
+        
+        return all_events
     
     def count_parameters(self) -> Dict[str, int]:
         """

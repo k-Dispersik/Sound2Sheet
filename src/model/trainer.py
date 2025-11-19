@@ -78,10 +78,7 @@ class Trainer:
         self.logger.info(f"  Frozen: {param_counts['frozen']:,}")
         
         # Loss function
-        self.criterion = nn.CrossEntropyLoss(
-            ignore_index=model_config.pad_token_id,
-            reduction='mean'
-        )
+        self.criterion = nn.BCEWithLogitsLoss(reduction='mean')
         
         # Optimizer
         self.optimizer = optim.AdamW(
@@ -244,42 +241,22 @@ class Trainer:
         for batch_idx, batch in enumerate(progress_bar):
             # Move to device
             mel = batch['mel'].to(self.device)
-            notes = batch['notes'].to(self.device)
+            piano_roll = batch['piano_roll'].to(self.device)  # [batch, time, num_piano_keys]
             
             # Forward pass with mixed precision
             if self.config.use_mixed_precision:
                 with autocast():
-                    outputs = self.model(
-                        mel,
-                        notes[:, :-1]  # Teacher forcing (exclude last token)
-                    )
+                    # Get logits from model
+                    logits = self.model(mel, piano_roll)  # [batch, time, num_piano_keys]
                     
-                    # Compute loss
-                    # outputs is logits tensor [batch, seq_len, vocab_size]
-                    logits = outputs
-                    targets = notes[:, 1:]  # Shift targets (exclude first token - SOS)
-                    
-                    # Reshape for loss computation
-                    logits_flat = logits.reshape(-1, self.model_config.vocab_size)
-                    targets_flat = targets.reshape(-1)
-                    
-                    loss = self.criterion(logits_flat, targets_flat)
+                    # Compute loss - BCEWithLogitsLoss for multi-label classification
+                    loss = self.criterion(logits, piano_roll)
                     
                     # Scale loss for gradient accumulation
                     loss = loss / self.config.gradient_accumulation_steps
             else:
-                outputs = self.model(
-                    mel,
-                    notes[:, :-1]
-                )
-                
-                logits = outputs
-                targets = notes[:, 1:]
-                
-                logits_flat = logits.reshape(-1, self.model_config.vocab_size)
-                targets_flat = targets.reshape(-1)
-                
-                loss = self.criterion(logits_flat, targets_flat)
+                logits = self.model(mel, piano_roll)
+                loss = self.criterion(logits, piano_roll)
                 loss = loss / self.config.gradient_accumulation_steps
             
             # Backward pass
@@ -349,55 +326,69 @@ class Trainer:
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
-        correct_predictions = 0
-        total_predictions = 0
+        
+        # Metrics for binary classification
+        all_predictions = []
+        all_targets = []
         
         with torch.no_grad():
             for batch in tqdm(self.val_loader, desc="Validation"):
                 # Move to device
                 mel = batch['mel'].to(self.device)
-                notes = batch['notes'].to(self.device)
+                piano_roll = batch['piano_roll'].to(self.device)  # [batch, time, num_piano_keys]
                 
                 # Forward pass
-                outputs = self.model(
-                    mel,
-                    notes[:, :-1]
-                )
+                logits = self.model(mel, piano_roll)  # [batch, time, num_piano_keys]
                 
                 # Compute loss
-                logits = outputs
-                targets = notes[:, 1:]
-                
-                logits_flat = logits.reshape(-1, self.model_config.vocab_size)
-                targets_flat = targets.reshape(-1)
-                
-                loss = self.criterion(logits_flat, targets_flat)
+                loss = self.criterion(logits, piano_roll)
                 
                 # Accumulate loss
                 total_loss += loss.item()
                 num_batches += 1
                 
-                # Compute accuracy (only on non-padding tokens)
-                predictions = torch.argmax(logits, dim=-1)
-                # Create mask for non-padding tokens (padding token is 0)
-                mask = (targets != self.model_config.pad_token_id)
+                # Get predictions (apply sigmoid and threshold)
+                probs = torch.sigmoid(logits)
+                predictions = (probs >= self.model_config.classification_threshold).float()
                 
-                correct = ((predictions == targets) & mask).sum().item()
-                total = mask.sum().item()
-                
-                correct_predictions += correct
-                total_predictions += total
+                # Collect for metrics
+                all_predictions.append(predictions.cpu())
+                all_targets.append(piano_roll.cpu())
         
         # Handle empty dataloader
         if num_batches == 0:
             self.logger.warning("No batches in validation loader")
-            return 0.0, {'accuracy': 0.0}
+            return 0.0, {'accuracy': 0.0, 'f1': 0.0, 'precision': 0.0, 'recall': 0.0}
         
         avg_loss = total_loss / num_batches
-        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0.0
+        
+        # Compute frame-level metrics
+        all_predictions = torch.cat(all_predictions, dim=0)  # [total_samples, time, num_keys]
+        all_targets = torch.cat(all_targets, dim=0)
+        
+        # Flatten for frame-level metrics
+        predictions_flat = all_predictions.reshape(-1)
+        targets_flat = all_targets.reshape(-1)
+        
+        # Calculate metrics
+        true_positives = ((predictions_flat == 1) & (targets_flat == 1)).sum().item()
+        false_positives = ((predictions_flat == 1) & (targets_flat == 0)).sum().item()
+        false_negatives = ((predictions_flat == 0) & (targets_flat == 1)).sum().item()
+        true_negatives = ((predictions_flat == 0) & (targets_flat == 0)).sum().item()
+        
+        # Frame-level accuracy
+        accuracy = (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
+        
+        # Precision, Recall, F1
+        precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
+        recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
         
         metrics = {
             'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1,
             'loss': avg_loss
         }
         
