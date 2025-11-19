@@ -87,10 +87,9 @@ class PianoDataset(Dataset):
             
         Returns:
             Dictionary containing:
-                - audio: Mel-spectrogram tensor [n_mels, time]
-                - notes: MIDI note sequence tensor [max_notes]
-                - note_mask: Mask for valid notes [max_notes]
-                - metadata: Sample metadata dictionary
+                - mel: Mel-spectrogram tensor [n_mels, time]
+                - piano_roll: Piano roll ground truth [time_frames, num_piano_keys]
+                - audio_path: Path to audio file (for debugging)
         """
         sample = self.samples[idx]
         
@@ -98,7 +97,7 @@ class PianoDataset(Dataset):
         audio_path = self.dataset_dir / sample['audio_path']
         audio = self._load_audio(audio_path)
         
-        # Apply augmentation if training (always apply when enabled)
+        # Apply augmentation if training
         if self.is_training and self.data_config.use_augmentation:
             audio = self._augment_audio(audio)
         
@@ -106,16 +105,18 @@ class PianoDataset(Dataset):
         mel_spec = self.audio_processor.to_mel_spectrogram(audio)
         mel_spec = torch.from_numpy(mel_spec).float()
         
-        # Load MIDI ground truth
+        # Load MIDI and convert to piano roll
         midi_path = self.dataset_dir / sample['midi_path']
         notes = self._load_midi_notes(midi_path)
         
-        # Convert to tensor with padding
-        notes_tensor, note_mask = self._prepare_note_sequence(notes)
+        # Generate piano roll from notes
+        # Calculate number of time frames based on mel-spectrogram
+        num_time_frames = mel_spec.shape[1]  # Mel-spec is [n_mels, time]
+        piano_roll = self._notes_to_piano_roll(notes, num_time_frames, audio.shape[0])
         
         return {
-            'mel': mel_spec,  # Changed from 'audio' to 'mel'
-            'notes': notes_tensor,
+            'mel': mel_spec,  # [n_mels, time]
+            'piano_roll': piano_roll,  # [time_frames, num_piano_keys]
             'audio_path': str(audio_path)  # For debugging/tracking
         }
     
@@ -217,72 +218,95 @@ class PianoDataset(Dataset):
         
         return notes
     
-    def _prepare_note_sequence(
+    def _notes_to_piano_roll(
         self,
-        notes: List[Dict]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        notes: List[Dict],
+        num_time_frames: int,
+        audio_length_samples: int
+    ) -> torch.Tensor:
         """
-        Prepare note sequence for model input.
+        Convert MIDI notes to piano roll representation.
         
+        Args:
+            notes: List of note dictionaries with onset/offset times in seconds
+            num_time_frames: Number of time frames (from mel-spectrogram)
+            audio_length_samples: Length of audio in samples
+            
         Returns:
-            - notes_tensor: [max_notes] tensor with SOS, note IDs, EOS, and padding
-            - note_mask: [max_notes] boolean mask (True for valid notes)
+            Piano roll tensor [time_frames, num_piano_keys]
+            Binary values: 1 if key is active at that frame, 0 otherwise
         """
-        max_notes = self.model_config.max_notes_per_sample
+        # Initialize piano roll
+        piano_roll = np.zeros((num_time_frames, self.model_config.num_piano_keys), dtype=np.float32)
         
-        # Extract pitches and convert to token IDs
-        # Token ID = MIDI note - min_midi_note + 1 (reserve 0 for padding)
-        note_ids = [self.model_config.sos_token_id]  # Start with SOS token
+        # Calculate audio duration in seconds
+        audio_duration_sec = audio_length_samples / self.data_config.sample_rate
         
-        for note in notes[:max_notes-2]:  # Leave space for SOS and EOS
+        # Calculate frame duration in seconds
+        # hop_length samples per frame
+        frame_duration_sec = self.data_config.hop_length / self.data_config.sample_rate
+        
+        # Fill piano roll
+        for note in notes:
             pitch = note['pitch']
-            # Clip to valid range
-            pitch = max(self.model_config.min_midi_note, 
-                       min(pitch, self.model_config.max_midi_note))
-            token_id = pitch - self.model_config.min_midi_note + 1
-            note_ids.append(token_id)
+            onset_sec = note['onset']
+            offset_sec = note['offset']
+            
+            # Convert MIDI pitch to key index (0-87)
+            if pitch < self.model_config.min_midi_note or pitch > self.model_config.max_midi_note:
+                continue  # Skip notes outside piano range
+            
+            key_idx = pitch - self.model_config.min_midi_note
+            
+            # Convert onset/offset times to frame indices
+            onset_frame = int(onset_sec / frame_duration_sec)
+            offset_frame = int(offset_sec / frame_duration_sec)
+            
+            # Clip to valid frame range
+            onset_frame = max(0, min(onset_frame, num_time_frames - 1))
+            offset_frame = max(0, min(offset_frame, num_time_frames - 1))
+            
+            # Set piano roll values to 1 for active frames
+            if offset_frame > onset_frame:
+                piano_roll[onset_frame:offset_frame, key_idx] = 1.0
         
-        note_ids.append(self.model_config.eos_token_id)  # End with EOS token
-        
-        # Create tensor with padding
-        notes_tensor = torch.full((max_notes,), self.model_config.pad_token_id, dtype=torch.long)
-        notes_tensor[:len(note_ids)] = torch.tensor(note_ids, dtype=torch.long)
-        
-        # Create mask
-        note_mask = torch.zeros(max_notes, dtype=torch.bool)
-        note_mask[:len(note_ids)] = True
-        
-        return notes_tensor, note_mask
+        return torch.from_numpy(piano_roll).float()
     
     def collate_fn(self, batch: List[Dict]) -> Dict[str, torch.Tensor]:
         """
         Custom collate function for DataLoader.
         
-        Handles variable-length mel-spectrograms by padding.
+        Handles variable-length mel-spectrograms and piano rolls by padding.
         """
         # Get max time dimension
         max_time = max(item['mel'].shape[1] for item in batch)
         
-        # Pad mel spectrograms
+        # Pad mel spectrograms and piano rolls
         padded_mel = []
-        mel_lengths = []
+        padded_piano_roll = []
         
         for item in batch:
             mel = item['mel']
+            piano_roll = item['piano_roll']
             time_steps = mel.shape[1]
-            mel_lengths.append(time_steps)
             
-            # Pad to max_time
+            # Pad mel to max_time
             if time_steps < max_time:
-                padding = torch.zeros(mel.shape[0], max_time - time_steps)
-                mel = torch.cat([mel, padding], dim=1)
+                mel_padding = torch.zeros(mel.shape[0], max_time - time_steps)
+                mel = torch.cat([mel, mel_padding], dim=1)
+            
+            # Pad piano roll to max_time
+            if piano_roll.shape[0] < max_time:
+                pr_padding = torch.zeros(max_time - piano_roll.shape[0], piano_roll.shape[1])
+                piano_roll = torch.cat([piano_roll, pr_padding], dim=0)
             
             padded_mel.append(mel)
+            padded_piano_roll.append(piano_roll)
         
         # Stack tensors
         batch_dict = {
             'mel': torch.stack(padded_mel),  # [batch, n_mels, time]
-            'notes': torch.stack([item['notes'] for item in batch]),  # [batch, max_notes]
+            'piano_roll': torch.stack(padded_piano_roll),  # [batch, time, num_piano_keys]
             'audio_path': [item['audio_path'] for item in batch]  # List of paths
         }
         
