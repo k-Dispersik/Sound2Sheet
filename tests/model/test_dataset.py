@@ -133,7 +133,7 @@ class TestPianoDataset:
         item = dataset[0]
         
         assert 'mel' in item
-        assert 'notes' in item
+        assert 'piano_roll' in item
         assert 'audio_path' in item
         
         # Check mel shape
@@ -142,11 +142,11 @@ class TestPianoDataset:
         assert mel.dim() == 2  # [n_mels, time]
         assert mel.shape[0] == config.n_mels
         
-        # Check notes
-        notes = item['notes']
-        assert isinstance(notes, torch.Tensor)
-        assert notes.dim() == 1
-        assert notes.dtype == torch.long
+        # Check piano_roll
+        piano_roll = item['piano_roll']
+        assert isinstance(piano_roll, torch.Tensor)
+        assert piano_roll.dim() == 2  # [time, 88]
+        assert piano_roll.shape[1] == 88
     
     def test_audio_loading(self, temp_dataset_dir):
         """Test audio loading and mel-spectrogram generation."""
@@ -169,7 +169,7 @@ class TestPianoDataset:
         assert torch.isfinite(mel).all()
     
     def test_midi_loading(self, temp_dataset_dir):
-        """Test MIDI loading and note extraction."""
+        """Test MIDI loading and piano roll generation."""
         config = DataConfig(dataset_dir=temp_dataset_dir)
         model_config = ModelConfig()
         
@@ -181,16 +181,16 @@ class TestPianoDataset:
         )
         
         item = dataset[0]
-        notes = item['notes']
+        piano_roll = item['piano_roll']
         
-        # Check notes format
-        assert isinstance(notes, torch.Tensor)
-        assert notes.dtype == torch.long
-        assert len(notes) > 0
+        # Check piano_roll format
+        assert isinstance(piano_roll, torch.Tensor)
+        assert piano_roll.dim() == 2
+        assert piano_roll.shape[1] == 88  # 88 piano keys
+        assert piano_roll.dtype == torch.float32
         
-        # Check note values are in valid range (0-91)
-        assert (notes >= 0).all()
-        assert (notes < model_config.vocab_size).all()
+        # Check values are binary (0 or 1)
+        assert ((piano_roll == 0) | (piano_roll == 1)).all()
     
     def test_augmentation_training_mode(self, temp_dataset_dir):
         """Test that augmentation is applied in training mode."""
@@ -232,12 +232,12 @@ class TestPianoDataset:
         
         # Mels should be exactly the same
         assert torch.equal(item1['mel'], item2['mel'])
-        assert torch.equal(item1['notes'], item2['notes'])
+        assert torch.equal(item1['piano_roll'], item2['piano_roll'])
     
-    def test_special_tokens(self, temp_dataset_dir):
-        """Test that special tokens are correctly added."""
+    def test_piano_roll_shape(self, temp_dataset_dir):
+        """Test that piano roll has correct shape."""
         config = DataConfig(dataset_dir=temp_dataset_dir)
-        model_config = ModelConfig()
+        model_config = ModelConfig(frame_duration_ms=10.0)
         
         dataset = PianoDataset(
             manifest_path=temp_dataset_dir / 'train_manifest.json',
@@ -247,35 +247,12 @@ class TestPianoDataset:
         )
         
         item = dataset[0]
-        notes = item['notes']
+        piano_roll = item['piano_roll']
         
-        # Check for SOS token at start (token 89)
-        assert notes[0] == 89
-        
-        # Find EOS token (should be after notes, before padding)
-        # Skip padding tokens (0) at the end
-        non_pad_notes = notes[notes != 0]
-        assert len(non_pad_notes) > 0
-        # Last non-padding token should be EOS (90)
-        assert non_pad_notes[-1] == 90
-    
-    def test_max_notes_truncation(self, temp_dataset_dir):
-        """Test that sequences are truncated to max_notes_per_sample."""
-        config = DataConfig(dataset_dir=temp_dataset_dir)
-        model_config = ModelConfig(max_notes_per_sample=50)
-        
-        dataset = PianoDataset(
-            manifest_path=temp_dataset_dir / 'train_manifest.json',
-            data_config=config,
-            model_config=model_config,
-            is_training=False
-        )
-        
-        item = dataset[0]
-        notes = item['notes']
-        
-        # Should not exceed max_notes_per_sample
-        assert len(notes) <= model_config.max_notes_per_sample
+        # Should have 88 piano keys
+        assert piano_roll.shape[1] == 88
+        # Time dimension should be positive
+        assert piano_roll.shape[0] > 0
 
 
 class TestCreateDataloaders:
@@ -317,14 +294,14 @@ class TestCreateDataloaders:
         batch = next(iter(train_loader))
         
         assert 'mel' in batch
-        assert 'notes' in batch
+        assert 'piano_roll' in batch
         
         # Check batch dimensions
         mel = batch['mel']
-        notes = batch['notes']
+        piano_roll = batch['piano_roll']
         
         assert mel.shape[0] == 2  # batch_size
-        assert notes.shape[0] == 2  # batch_size
+        assert piano_roll.shape[0] == 2  # batch_size
     
     def test_collate_function_padding(self, temp_dataset_dir):
         """Test that collate function pads sequences correctly."""
@@ -341,17 +318,17 @@ class TestCreateDataloaders:
         batch = next(iter(train_loader))
         
         mel = batch['mel']
-        notes = batch['notes']
+        piano_roll = batch['piano_roll']
         
         # All mels in batch should have same time dimension (padded)
         assert mel.shape[0] == 3  # batch_size
         time_dims = [mel[i].shape[-1] for i in range(mel.shape[0])]
         assert len(set(time_dims)) == 1  # All same
         
-        # All note sequences should have same length (padded)
-        assert notes.shape[0] == 3  # batch_size
-        note_lens = [notes[i].shape[0] for i in range(notes.shape[0])]
-        assert len(set(note_lens)) == 1  # All same
+        # All piano_roll sequences should have same time length (padded)
+        assert piano_roll.shape[0] == 3  # batch_size
+        piano_roll_lens = [piano_roll[i].shape[0] for i in range(piano_roll.shape[0])]
+        assert len(set(piano_roll_lens)) == 1  # All same
     
     def test_dataloader_shuffling(self, temp_dataset_dir):
         """Test that train dataloader shuffles data."""
@@ -423,7 +400,7 @@ class TestCreateDataloaders:
         for batch in train_loader:
             batch_count += 1
             assert 'mel' in batch
-            assert 'notes' in batch
+            assert 'piano_roll' in batch
         
         # Should have 3 batches (5 samples / batch_size=2 = 2.5 -> 3)
         assert batch_count == 3

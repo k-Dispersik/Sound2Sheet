@@ -23,8 +23,8 @@ def get_minimal_config():
     return ModelConfig(
         device='cpu',
         hidden_size=128,
-        num_decoder_layers=1,
-        num_attention_heads=2
+        num_attention_heads=2,
+        use_temporal_conv=False  # Disable for faster tests
     )
 
 
@@ -35,7 +35,7 @@ def mock_dataloaders():
     def create_batch():
         return {
             'mel': torch.randn(1, 128, 100),  # Reduced batch size to 1
-            'notes': torch.randint(0, 92, (1, 10), dtype=torch.long),  # Shorter sequences, explicit long type
+            'piano_roll': torch.rand(1, 100, 88) > 0.5,  # Binary piano roll [batch, time, 88]
             'audio_path': ['test1.wav']
         }
     
@@ -57,8 +57,8 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,  # Smaller model
-            num_decoder_layers=2,  # Fewer layers
-            num_attention_heads=4
+            num_attention_heads=4,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(
@@ -87,8 +87,8 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,
-            num_decoder_layers=2,
-            num_attention_heads=4
+            num_attention_heads=4,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(
@@ -117,8 +117,8 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,
-            num_decoder_layers=2,
-            num_attention_heads=4
+            num_attention_heads=4,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(
@@ -144,8 +144,8 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,
-            num_decoder_layers=2,
-            num_attention_heads=4
+            num_attention_heads=4,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(use_mixed_precision=False)  # CPU doesn't support mixed precision
@@ -174,8 +174,8 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,  # Very small model for speed
-            num_decoder_layers=1,
-            num_attention_heads=2
+            num_attention_heads=2,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(
@@ -211,8 +211,8 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,
-            num_decoder_layers=1,
-            num_attention_heads=2
+            num_attention_heads=2,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(
@@ -245,8 +245,8 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,
-            num_decoder_layers=1,
-            num_attention_heads=2
+            num_attention_heads=2,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(
@@ -279,8 +279,8 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,
-            num_decoder_layers=1,
-            num_attention_heads=2
+            num_attention_heads=2,
+            use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
         training_config = TrainingConfig(

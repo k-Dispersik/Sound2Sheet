@@ -6,7 +6,7 @@ Contains the model architecture, training, and inference code.
 
 from .config import ModelConfig, TrainingConfig, InferenceConfig, DataConfig
 from .sound2sheet_model import Sound2SheetModel
-from .ast_model import ASTWrapper, NoteDecoder
+from .ast_model import ASTWrapper, PianoRollClassifier
 from .dataset import PianoDataset, create_dataloaders
 from .trainer import Trainer
 
@@ -21,7 +21,7 @@ __all__ = [
     'DataConfig',
     'Sound2SheetModel',
     'ASTWrapper',
-    'NoteDecoder',
+    'PianoRollClassifier',
     'PianoDataset',
     'create_dataloaders',
     'Trainer',

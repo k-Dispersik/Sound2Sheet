@@ -20,33 +20,35 @@ class TestModelConfig:
         config = ModelConfig()
         
         assert config.ast_model_name == 'MIT/ast-finetuned-audioset-10-10-0.4593'
-        assert config.vocab_size == 92  # 88 keys + 4 special tokens
+        assert config.num_piano_keys == 88
         assert config.hidden_size == 768
-        assert config.num_decoder_layers == 6
-        assert config.num_attention_heads == 8
-        assert config.decoder_ffn_dim == 2048  # Fixed: was decoder_ff_dim
         assert config.dropout == 0.1
-        assert config.max_notes_per_sample == 256  # Fixed: was 1000
+        assert config.frame_duration_ms == 10.0
+        assert config.classification_threshold == 0.5
+        assert config.use_temporal_conv is True
+        assert config.classifier_hidden_dim == 512
         assert config.device == 'cuda'
     
     def test_custom_initialization(self):
         """Test ModelConfig with custom values."""
         config = ModelConfig(
             hidden_size=512,
-            num_decoder_layers=4,
-            vocab_size=100,
+            num_piano_keys=88,
+            frame_duration_ms=20.0,
+            use_temporal_conv=False,
             device='cpu'
         )
         
         assert config.hidden_size == 512
-        assert config.num_decoder_layers == 4
-        assert config.vocab_size == 100
+        assert config.num_piano_keys == 88
+        assert config.frame_duration_ms == 20.0
+        assert config.use_temporal_conv is False
         assert config.device == 'cpu'
     
-    def test_vocab_size_validation(self):
-        """Test that vocab_size must be positive."""
+    def test_num_piano_keys_validation(self):
+        """Test that num_piano_keys must be positive."""
         with pytest.raises(Exception):
-            config = ModelConfig(vocab_size=-1)
+            config = ModelConfig(num_piano_keys=-1)
     
     def test_hidden_size_validation(self):
         """Test that hidden_size must be positive."""
@@ -61,15 +63,15 @@ class TestModelConfig:
         with pytest.raises(Exception):
             ModelConfig(dropout=1.5)
     
-    def test_attention_heads_divisibility(self):
-        """Test that hidden_size is divisible by num_attention_heads."""
+    def test_classifier_layers_validation(self):
+        """Test that num_classifier_layers must be positive."""
         # Valid configuration
-        config = ModelConfig(hidden_size=768, num_attention_heads=8)
-        assert config.hidden_size % config.num_attention_heads == 0
+        config = ModelConfig(num_classifier_layers=3)
+        assert config.num_classifier_layers == 3
         
-        # Invalid configuration should raise error during model creation
-        config_invalid = ModelConfig(hidden_size=768, num_attention_heads=7)
-        assert config_invalid.hidden_size % config_invalid.num_attention_heads != 0
+        # Invalid configuration
+        with pytest.raises(ValueError):
+            ModelConfig(num_classifier_layers=0)
 
 
 class TestTrainingConfig:
@@ -155,82 +157,45 @@ class TestInferenceConfig:
         """Test default InferenceConfig initialization."""
         config = InferenceConfig()
         
-        assert config.max_length == 1000
-        assert config.temperature == 1.0
-        assert config.use_beam_search is False
-        assert config.beam_size == 5
-        assert config.top_k == 0
-        assert config.top_p == 0.0
+        assert config.median_filter_size == 3
+        assert config.min_note_duration_ms == 30.0
+        assert config.output_format == 'events'
     
     def test_custom_initialization(self):
         """Test InferenceConfig with custom values."""
         config = InferenceConfig(
-            max_length=500,
-            temperature=0.8,
-            use_beam_search=True,
-            beam_size=10
+            median_filter_size=7,
+            min_note_duration_ms=100.0,
+            output_format='piano_roll'
         )
         
-        assert config.max_length == 500
-        assert config.temperature == 0.8
-        assert config.use_beam_search is True
-        assert config.beam_size == 10
+        assert config.median_filter_size == 7
+        assert config.min_note_duration_ms == 100.0
+        assert config.output_format == 'piano_roll'
     
-    def test_temperature_validation(self):
-        """Test temperature must be positive."""
-        with pytest.raises(Exception):
-            InferenceConfig(temperature=0.0)
+    def test_median_filter_validation(self):
+        """Test median filter size must be positive odd number."""
+        config = InferenceConfig(median_filter_size=7)
+        assert config.median_filter_size == 7
         
-        with pytest.raises(Exception):
-            InferenceConfig(temperature=-1.0)
+        # Should accept positive odd numbers
+        config = InferenceConfig(median_filter_size=3)
+        assert config.median_filter_size == 3
     
-    def test_max_length_validation(self):
-        """Test max_length must be positive."""
-        with pytest.raises(Exception):
-            InferenceConfig(max_length=0)
-    
-    def test_beam_size_validation(self):
-        """Test beam_size must be positive when beam search is used."""
-        config = InferenceConfig(use_beam_search=True, beam_size=1)
-        assert config.beam_size >= 1
+    def test_min_note_duration_validation(self):
+        """Test min_note_duration_ms must be positive."""
+        config = InferenceConfig(min_note_duration_ms=100.0)
+        assert config.min_note_duration_ms == 100.0
         
         with pytest.raises(Exception):
-            InferenceConfig(use_beam_search=True, beam_size=0)
+            InferenceConfig(min_note_duration_ms=-1.0)
     
-    def test_top_k_validation(self):
-        """Test top_k sampling parameter."""
-        config = InferenceConfig(top_k=50)
-        assert config.top_k == 50
-        
-        # top_k = 0 means disabled
-        config = InferenceConfig(top_k=0)
-        assert config.top_k == 0
-    
-    def test_top_p_validation(self):
-        """Test top_p (nucleus sampling) parameter."""
-        config = InferenceConfig(top_p=0.9)
-        assert 0.0 <= config.top_p <= 1.0
-        
-        with pytest.raises(Exception):
-            InferenceConfig(top_p=1.5)
-    
-    def test_sampling_strategies(self):
-        """Test different sampling strategies."""
-        # Greedy decoding
-        greedy_config = InferenceConfig(temperature=1.0, top_k=0, top_p=0.0)
-        assert not greedy_config.use_beam_search
-        
-        # Beam search
-        beam_config = InferenceConfig(use_beam_search=True, beam_size=5)
-        assert beam_config.use_beam_search
-        
-        # Top-k sampling
-        topk_config = InferenceConfig(top_k=50)
-        assert topk_config.top_k > 0
-        
-        # Nucleus sampling
-        nucleus_config = InferenceConfig(top_p=0.9)
-        assert nucleus_config.top_p > 0.0
+    def test_output_format_validation(self):
+        """Test output format choices."""
+        # Valid formats
+        for fmt in ['piano_roll', 'events']:
+            config = InferenceConfig(output_format=fmt)
+            assert config.output_format == fmt
 
 
 class TestDataConfig:
@@ -336,11 +301,11 @@ class TestConfigIntegration:
         """Test that all configs work together."""
         model_config = ModelConfig(hidden_size=768)
         training_config = TrainingConfig(batch_size=16)
-        inference_config = InferenceConfig(max_length=1000)
+        inference_config = InferenceConfig(median_filter_size=5)
         data_config = DataConfig(dataset_dir=Path('test'))
         
         # Model and data configs should be compatible
-        assert model_config.vocab_size == 92
+        assert model_config.num_piano_keys == 88
         assert data_config.sample_rate == 16000
         
         # Training and model configs
@@ -364,7 +329,7 @@ class TestConfigIntegration:
         
         assert isinstance(config_dict, dict)
         assert 'hidden_size' in config_dict
-        assert 'vocab_size' in config_dict
+        assert 'num_piano_keys' in config_dict
 
 
 if __name__ == '__main__':
