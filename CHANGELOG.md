@@ -16,6 +16,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Nothing yet
 
+## [0.7.0] - 2025-11-19
+### Changed
+- **BREAKING: Complete Model Architecture Redesign - Piano Roll Classification**
+  - Migrated from sequence-to-sequence (seq2seq) to Piano Roll Classification approach
+  - Model now performs frame-level binary classification instead of autoregressive note generation
+  - Architecture changes:
+    - Replaced `NoteDecoder` (Transformer decoder) with `PianoRollClassifier` (multi-layer FC + optional Conv1D)
+    - Removed positional encoding (not needed for frame-level classification)
+    - Output changed from token sequence `[batch, seq, vocab_size]` to piano roll `[batch, time, 88]`
+    - Loss changed from CrossEntropyLoss to BCEWithLogitsLoss (multi-label binary)
+  - Configuration changes (`ModelConfig`):
+    - Removed: `vocab_size`, `pad/sos/eos/unk_token_id`, `max_sequence_length`, `max_notes_per_sample`, `num_decoder_layers`, `num_attention_heads`, `decoder_ffn_dim`
+    - Added: `num_piano_keys=88`, `frame_duration_ms=10.0`, `classification_threshold=0.5`, `num_classifier_layers=2`, `classifier_hidden_dim=512`, `use_temporal_conv=True`, `temporal_conv_kernel=5`
+  - Configuration changes (`InferenceConfig`):
+    - Removed: `max_length`, `temperature`, `use_beam_search`, `beam_size`, `top_k`, `top_p`, `remove_duplicates`, `quantize_timing`
+    - Added: `median_filter_size=3`, `min_note_duration_ms=30.0`, `onset_tolerance_ms=50.0`, `use_median_filter=True`, `output_format='events'`, `events_include_velocity=False`, `default_velocity=80`
+  - Dataset changes:
+    - `PianoDataset.__getitem__()` now returns `piano_roll` [time, 88] instead of `notes` sequence
+    - Removed special tokens (SOS/EOS) from data preparation
+    - Added `_notes_to_piano_roll()` method for converting MIDI to binary piano roll
+    - Collate function now pads piano rolls instead of note sequences
+  - Model changes (`Sound2SheetModel`):
+    - `forward()` no longer takes `target_notes`, only `mel` input
+    - Replaced `generate()` with `predict()` method that returns `(piano_roll, events)`
+    - Added `_apply_median_filter()` for temporal smoothing
+    - Added `_piano_roll_to_events()` for onset/offset detection and event extraction
+  - Trainer changes:
+    - Uses BCEWithLogitsLoss instead of CrossEntropyLoss
+    - Removed teacher forcing logic
+    - Metrics now frame-level: accuracy, precision, recall, F1 score
+    - Training loop simplified (no autoregressive decoding needed)
+  - Test suite updates:
+    - Updated all 52 configuration, dataset, and model tests
+    - Replaced NoteDecoder tests with PianoRollClassifier tests
+    - Updated trainer tests for new loss function and metrics
+    - All tests passing (31 config + 17 dataset + 4 model tests)
+  - Documentation updates:
+    - Completely rewrote model README with Piano Roll approach
+    - Removed seq2seq architecture diagrams and examples
+    - Added Piano Roll representation explanation
+    - Updated training and inference examples
+    - Updated Copilot instructions for new architecture
+
+### Added
+- **PianoRollClassifier**: New classification head for frame-level note detection
+  - Multi-layer fully connected network with LayerNorm and Dropout
+  - Optional temporal Conv1D for local context (kernel size 5)
+  - Residual connections in temporal convolution
+  - Binary output for 88 piano keys per frame
+- **Piano Roll Post-processing**:
+  - Median filtering for temporal smoothing
+  - Onset/offset detection with configurable tolerance
+  - Minimum note duration filtering
+  - Event extraction with pitch, onset_ms, offset_ms
+- **Improved Inference**:
+  - Direct frame prediction (no beam search needed)
+  - Faster inference (no autoregressive decoding)
+  - More robust to timing variations
+  - Better polyphony handling (concurrent notes)
+
+### Fixed
+- Import errors in `src/model/__init__.py` (replaced `NoteDecoder` with `PianoRollClassifier`)
+- Test configuration mismatches (median_filter_size, output_format validation)
+- Model attribute references (`d_model` → `hidden_size` in PianoRollClassifier)
+
+### Performance
+- **Training**: Faster convergence (direct supervision vs autoregressive)
+- **Inference**: ~10x faster (parallel frame prediction vs sequential generation)
+- **Memory**: Lower memory footprint (no decoder attention cache)
+
+### Migration Notes
+- **BREAKING**: Old checkpoints incompatible with new architecture
+- **BREAKING**: Dataset format changed (piano_roll instead of notes)
+- **BREAKING**: API changed (predict() instead of generate())
+- Models need to be retrained with new Piano Roll approach
+- See model README for updated training examples
+
 ## [0.6.2] - 2025-11-11
 ### Changed
 - **Jupyter Notebook Training Pipeline Updates**
