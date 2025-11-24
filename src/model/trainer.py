@@ -8,7 +8,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast
+from torch.cuda.amp import GradScaler
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 import logging
@@ -64,9 +65,7 @@ class Trainer:
         self._setup_logging()
         
         # Device setup
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() and model_config.device == "cuda" else "cpu"
-        )
+        self.device = torch.device(model_config.device if torch.cuda.is_available() and model_config.device == "cuda" else "cpu")
         self.model.to(self.device)
         self.logger.info(f"Using device: {self.device}")
         
@@ -245,7 +244,7 @@ class Trainer:
             
             # Forward pass with mixed precision
             if self.config.use_mixed_precision:
-                with autocast():
+                with autocast(self.device.type):
                     # Get logits from model
                     logits = self.model(mel, piano_roll)  # [batch, time, num_piano_keys]
                     
