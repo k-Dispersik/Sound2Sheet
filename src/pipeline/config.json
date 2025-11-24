@@ -1,0 +1,117 @@
+{
+    "dataset": {
+        "use_existing_dataset": false,
+        "existing_dataset_path": null,
+        "samples": 5000,
+        "complexity": "medium",
+        "min_notes": 10,
+        "max_notes": 100,
+        "min_duration": 5.0,
+        "max_duration": 60.0,
+        "key_signatures": null,
+        "time_signatures": null,
+        "output_dir": "data/datasets/training_run",
+        "synthesize_audio": true,
+        "soundfont_path": null
+    },
+    "audio": {
+        "sample_rate": 16000,
+        "n_fft": 1024,
+        "hop_length": 320,
+        "n_mels": 128,
+        "f_min": 0.0,
+        "f_max": 8000.0,
+        "normalize": true,
+        "pre_emphasis": 0.97,
+        "augmentation": {
+            "enabled": true,
+            "noise_type": "random",
+            "noise_types_pool": [
+                "white",
+                "pink",
+                "ambient"
+            ],
+            "noise_level": 0.005,
+            "pitch_shift_range": [
+                -2,
+                2
+            ],
+            "time_stretch_range": [
+                0.9,
+                1.1
+            ]
+        }
+    },
+    "model": {
+        "encoder_name": "MIT/ast-finetuned-audioset-10-10-0.4593",
+        "freeze_encoder": true,
+        "hidden_size": 768,
+        "num_decoder_layers": 6,
+        "num_attention_heads": 8,
+        "dropout": 0.1,
+        "max_sequence_length": 1024,
+        "vocab_size": 388,
+        "device": "cuda"
+    },
+    "training": {
+        "resume_checkpoint": null,
+        "batch_size": 8,
+        "num_epochs": 100,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "warmup_steps": 1000,
+        "max_grad_norm": 1.0,
+        "use_mixed_precision": true,
+        "gradient_accumulation_steps": 8,
+        "num_workers": 4,
+        "gpu_memory_fraction": 0.90,
+        "lr_schedule": "cosine",
+        "early_stopping_patience": 15,
+        "early_stopping_min_delta": 0.0005,
+        "checkpoint_dir": "models/checkpoints",
+        "save_every_n_epochs": 0,
+        "keep_last_n_checkpoints": 2,
+        "log_dir": "logs",
+        "log_every_n_steps": 50,
+        "eval_every_n_epochs": 1
+    },
+    "inference": {
+        "strategy": "beam_search",
+        "max_length": 1024,
+        "num_beams": 5,
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 0.95,
+        "repetition_penalty": 1.2
+    },
+    "evaluation": {
+        "enabled": true,
+        "onset_tolerance": 0.05,
+        "offset_tolerance": 0.05,
+        "pitch_tolerance": 0,
+        "min_duration": 0.1,
+        "max_duration": null,
+        "visualizations": {
+            "enabled": true,
+            "output_dir": "results/visualizations",
+            "plot_types": [
+                "dashboard",
+                "confusion_matrix",
+                "metrics_over_time"
+            ]
+        },
+        "reports": {
+            "enabled": true,
+            "output_dir": "results/reports",
+            "formats": [
+                "json",
+                "csv"
+            ]
+        }
+    },
+    "output": {
+        "model_dir": "models/trained",
+        "results_dir": "results",
+        "final_model_name": "sound2sheet_model.pt"
+    }
+}

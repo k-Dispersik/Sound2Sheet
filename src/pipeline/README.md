@@ -19,7 +19,7 @@ The pipeline automates the entire machine learning workflow:
 python -m src.pipeline.run_pipeline
 
 # Use custom config file
-python -m src.pipeline.run_pipeline --config my_config.yaml
+python -m src.pipeline.run_pipeline --config src/pipeline/config.json
 
 # Quick test run
 python -m src.pipeline.run_pipeline --samples 100 --epochs 5 --no-eval
@@ -55,45 +55,7 @@ python -m src.pipeline.run_pipeline \
 
 ## Configuration
 
-### Configuration File
-
-The pipeline uses YAML configuration files. Default config is at `src/pipeline/config.yaml`.
-
-```yaml
-# Dataset Generation
-dataset:
-  samples: 1000
-  complexity: "medium"  # simple, medium, complex
-  min_notes: 10
-  max_notes: 50
-  min_duration: 5.0
-  max_duration: 30.0
-  synthesize_audio: true
-  
-# Model Architecture
-model:
-  encoder_name: "MIT/ast-finetuned-audioset-10-10-0.4593"
-  freeze_encoder: true
-  hidden_size: 768
-  num_decoder_layers: 6
-  device: "cuda"
-  
-# Training Configuration
-training:
-  batch_size: 16
-  num_epochs: 50
-  learning_rate: 0.0001
-  use_mixed_precision: true
-  early_stopping_patience: 10
-  
-# Evaluation
-evaluation:
-  enabled: true
-  onset_tolerance: 0.05
-  visualizations:
-    enabled: true
-    plot_types: ["dashboard", "confusion_matrix"]
-```
+### Configuration File`
 
 ### Command-Line Arguments
 
