@@ -7,14 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Nothing yet
+### Changed
+- **Trainer Refactor:** Removed all internal logging from `Trainer` class and split large methods into smaller, testable functions
+- Improved device setup and mixed precision handling in `Trainer`
+- Piano roll resizing now robust to tensor types (casts to float before interpolation)
+- ModelConfig signature updated (removed obsolete `num_attention_heads`)
+- Integration test updated to expect 2D piano roll output
+
+## [0.7.1] - 2025-11-24
 
 ### Changed
-- Nothing yet
+- See below for details of Trainer refactor, test fixes, and model training improvements
 
-### Fixed
-- Nothing yet
+## [Unreleased]
+- All test failures after refactor (parameter mismatch, tensor type errors, output shape mismatch)
+- `torch.nn.functional.interpolate` now works with float tensors for piano roll resizing
+- Tests now match new ModelConfig and Trainer signatures
+
+### Added
+- Helper methods for checkpointing and early stopping in `Trainer`
+
+### Performance
+- Faster and more robust training pipeline
+
+### Migration Notes
+- **BREAKING:** Old tests and configs incompatible with new Trainer and ModelConfig signatures
+
 
 ## [0.7.0] - 2025-11-19
 ### Changed
