@@ -246,16 +246,38 @@ class Trainer:
             if self.config.use_mixed_precision:
                 with autocast(self.device.type):
                     # Get logits from model
-                    logits = self.model(mel, piano_roll)  # [batch, time, num_piano_keys]
+                    logits = self.model(mel, piano_roll)  # [batch, enc_time, num_piano_keys]
+                    
+                    # Resize piano_roll to match logits temporal dimension
+                    # [batch, orig_time, keys] -> [batch, keys, orig_time] -> interpolate -> [batch, keys, enc_time] -> [batch, enc_time, keys]
+                    if piano_roll.size(1) != logits.size(1):
+                        piano_roll_resized = torch.nn.functional.interpolate(
+                            piano_roll.transpose(1, 2),  # [batch, keys, time]
+                            size=logits.size(1),
+                            mode='nearest'
+                        ).transpose(1, 2)  # [batch, enc_time, keys]
+                    else:
+                        piano_roll_resized = piano_roll
                     
                     # Compute loss - BCEWithLogitsLoss for multi-label classification
-                    loss = self.criterion(logits, piano_roll)
+                    loss = self.criterion(logits, piano_roll_resized)
                     
                     # Scale loss for gradient accumulation
                     loss = loss / self.config.gradient_accumulation_steps
             else:
                 logits = self.model(mel, piano_roll)
-                loss = self.criterion(logits, piano_roll)
+                
+                # Resize piano_roll to match logits temporal dimension
+                if piano_roll.size(1) != logits.size(1):
+                    piano_roll_resized = torch.nn.functional.interpolate(
+                        piano_roll.transpose(1, 2),
+                        size=logits.size(1),
+                        mode='nearest'
+                    ).transpose(1, 2)
+                else:
+                    piano_roll_resized = piano_roll
+                
+                loss = self.criterion(logits, piano_roll_resized)
                 loss = loss / self.config.gradient_accumulation_steps
             
             # Backward pass
@@ -337,10 +359,20 @@ class Trainer:
                 piano_roll = batch['piano_roll'].to(self.device)  # [batch, time, num_piano_keys]
                 
                 # Forward pass
-                logits = self.model(mel, piano_roll)  # [batch, time, num_piano_keys]
+                logits = self.model(mel, piano_roll)  # [batch, enc_time, num_piano_keys]
+                
+                # Resize piano_roll to match logits temporal dimension
+                if piano_roll.size(1) != logits.size(1):
+                    piano_roll_resized = torch.nn.functional.interpolate(
+                        piano_roll.transpose(1, 2),
+                        size=logits.size(1),
+                        mode='nearest'
+                    ).transpose(1, 2)
+                else:
+                    piano_roll_resized = piano_roll
                 
                 # Compute loss
-                loss = self.criterion(logits, piano_roll)
+                loss = self.criterion(logits, piano_roll_resized)
                 
                 # Accumulate loss
                 total_loss += loss.item()
@@ -350,9 +382,9 @@ class Trainer:
                 probs = torch.sigmoid(logits)
                 predictions = (probs >= self.model_config.classification_threshold).float()
                 
-                # Collect for metrics
+                # Collect for metrics (use resized piano_roll for fair comparison)
                 all_predictions.append(predictions.cpu())
-                all_targets.append(piano_roll.cpu())
+                all_targets.append(piano_roll_resized.cpu())
         
         # Handle empty dataloader
         if num_batches == 0:
