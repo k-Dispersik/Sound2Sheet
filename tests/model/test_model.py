@@ -329,12 +329,17 @@ class TestModelIntegration:
         
         with torch.no_grad():
             piano_roll, events = model.predict(mel, inference_config)
-        
+
+        # Remove batch dimension for test
+        piano_roll = piano_roll.squeeze(0)
+
+        print(piano_roll)
+
         # Check piano roll
         assert piano_roll is not None
         assert piano_roll.dim() == 2
         assert piano_roll.shape[-1] == 88
-        
+
         # Check events
         assert events is not None
         assert isinstance(events, list)
