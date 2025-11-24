@@ -23,7 +23,6 @@ def get_minimal_config():
     return ModelConfig(
         device='cpu',
         hidden_size=128,
-        num_attention_heads=2,
         use_temporal_conv=False  # Disable for faster tests
     )
 
@@ -57,7 +56,6 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,  # Smaller model
-            num_attention_heads=4,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -87,7 +85,6 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,
-            num_attention_heads=4,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -117,7 +114,6 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,
-            num_attention_heads=4,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -144,7 +140,6 @@ class TestTrainerInitialization:
         config = ModelConfig(
             device='cpu',
             hidden_size=256,
-            num_attention_heads=4,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -174,7 +169,6 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,  # Very small model for speed
-            num_attention_heads=2,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -211,7 +205,6 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,
-            num_attention_heads=2,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -245,7 +238,6 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,
-            num_attention_heads=2,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)
@@ -279,7 +271,6 @@ class TestTrainerTraining:
         config = ModelConfig(
             device='cpu',
             hidden_size=128,
-            num_attention_heads=2,
             use_temporal_conv=False
         )
         model = Sound2SheetModel(config)

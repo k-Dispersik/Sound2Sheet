@@ -245,10 +245,10 @@ class Sound2SheetModel(nn.Module):
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         
         encoder_params = sum(p.numel() for p in self.encoder.parameters())
-        decoder_params = sum(p.numel() for p in self.decoder.parameters())
+        classifier_params = sum(p.numel() for p in self.classifier.parameters())
         
         encoder_trainable = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
-        decoder_trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
+        classifier_trainable = sum(p.numel() for p in self.classifier.parameters() if p.requires_grad)
         
         return {
             'total': total_params,
@@ -256,8 +256,8 @@ class Sound2SheetModel(nn.Module):
             'frozen': total_params - trainable_params,
             'encoder_total': encoder_params,
             'encoder_trainable': encoder_trainable,
-            'decoder_total': decoder_params,
-            'decoder_trainable': decoder_trainable
+            'classifier_total': classifier_params,
+            'classifier_trainable': classifier_trainable
         }
     
     @classmethod
