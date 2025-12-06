@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import autocast
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 import logging
@@ -81,7 +81,7 @@ class Trainer:
         self.scheduler = self._create_scheduler()
         
         # Mixed precision training
-        self.scaler = GradScaler() if training_config.use_mixed_precision else None
+        self.scaler = GradScaler(self.device.type) if training_config.use_mixed_precision else None
         
         # Training state
         self.current_epoch = 0

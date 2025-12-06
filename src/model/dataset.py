@@ -362,9 +362,10 @@ def create_dataloaders(
     )
     
     # Create dataloader kwargs (prefetch_factor only works with num_workers > 0)
+    # pin_memory only useful when CUDA is available
     loader_kwargs = {
         'num_workers': training_config.num_workers,
-        'pin_memory': training_config.pin_memory,
+        'pin_memory': training_config.pin_memory and torch.cuda.is_available(),
     }
     if training_config.num_workers > 0:
         loader_kwargs['prefetch_factor'] = training_config.prefetch_factor
