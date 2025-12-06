@@ -1,7 +1,7 @@
 {
     "experiment_name": "data/sound2sheet_experiment_01",
     "dataset": {
-        "total_samples": 10,
+        "total_samples": 5000,
         "complexity_distribution": {
             "beginner": 0.5,
             "intermediate": 0.4,
@@ -12,7 +12,7 @@
         "num_piano_keys": 88,
         "hidden_size": 512,
         "dropout": 0.2,
-        "frame_duration_ms": 20.0,
+        "frame_duration_ms": 10.0,
         "classification_threshold": 0.5,
         "num_classifier_layers": 2,
         "classifier_hidden_dim": 256,
@@ -30,14 +30,14 @@
     },
     "training": {
         "batch_size": 32,
-        "num_epochs": 3,
-        "learning_rate": 0.001,
+        "num_epochs": 50,
+        "learning_rate": 0.0001,
         "optimizer": "adamw",
         "lr_scheduler_type": "cosine",
         "use_mixed_precision": true,
         "max_grad_norm": 1.0,
         "gradient_accumulation_steps": 4,
-        "save_every_n_epochs": 0,
+        "save_every_n_epochs": 10,
         "early_stopping_patience": 10
     }
 }
