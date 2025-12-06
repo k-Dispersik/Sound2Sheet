@@ -1,203 +1,139 @@
-# Converter (Note Builder)
+# Converter: Note Sequences & Export
 
-## Overview
+Convert model predictions into structured musical notation with quantization and multi-format export.
 
-Module for converting model predictions into structured musical notation with timing analysis, quantization, and multi-format export (JSON, MIDI, MusicXML).
+## Components
 
-## Class Architecture
+### Note
+Musical note representation with expression.
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                        DATA STRUCTURES                          │
-└────────────────────────────────────────────────────────────────┘
+**Attributes:**
+- `pitch` - MIDI number (0-127)
+- `start_time` - Onset in seconds
+- `duration` - Duration in seconds
+- `velocity` - MIDI velocity (0-127)
+- `dynamic` - Expression (PPP/PP/P/MP/MF/F/FF/FFF)
+- `articulation` - STACCATO/LEGATO/ACCENT/TENUTO/MARCATO/SFORZANDO
+- `is_tied_start/end` - Tie notation
+- `tie_group_id` - Group tied notes
 
-┌──────────────────┐
-│  Dynamic         │  Expression dynamics
-│  - PPP...FFF     │  (8 velocity levels)
-└──────────────────┘
+### Measure
+Musical bar containing notes.
 
-┌──────────────────┐
-│  Articulation    │  Note articulation
-│  - STACCATO      │  (6 types)
-│  - LEGATO        │
-│  - ACCENT        │
-└──────────────────┘
+**Attributes:**
+- `number` - 1-indexed measure number
+- `start_time` - Start in seconds
+- `duration` - Duration in seconds
+- `time_signature` - (numerator, denominator)
+- `notes` - List of notes
 
-┌──────────────────────────────────────────────────────┐
-│  Note                                                │
-│  - pitch: int (MIDI number)                          │
-│  - start_time: float (seconds)                       │
-│  - duration: float (seconds)                         │
-│  - velocity: int (0-127)                             │
-│  - is_tied_start: bool                               │
-│  - is_tied_end: bool                                 │
-│  - tie_group_id: Optional[int]                       │
-│  - dynamic: Optional[Dynamic]                        │
-│  - articulation: Optional[Articulation]              │
-│  + to_dict()                                         │
-│  + infer_dynamic_from_velocity()                     │
-└──────────────────────────────────────────────────────┘
-         │
-         │ contains
-         ▼
-┌──────────────────────────────────────────────────────┐
-│  Measure                                             │
-│  - number: int                                       │
-│  - start_time: float                                 │
-│  - duration: float                                   │
-│  - time_signature: Tuple[int, int]                   │
-│  - notes: List[Note]                                 │
-│  + to_dict()                                         │
-└──────────────────────────────────────────────────────┘
-         │
-         │ contains
-         ▼
-┌──────────────────────────────────────────────────────┐
-│  NoteSequence                                        │
-│  - notes: List[Note]                                 │
-│  - measures: List[Measure]                           │
-│  - tempo: int (BPM)                                  │
-│  - time_signature: Tuple[int, int]                   │
-│  - key_signature: str                                │
-│  + organize_into_measures()                          │
-│  + apply_tied_notes()                                │
-│  + infer_expression_marks()                          │
-│  + to_dict()                                         │
-└──────────────────────────────────────────────────────┘
+### NoteSequence
+Complete musical sequence with metadata.
 
+**Attributes:**
+- `notes` - All notes
+- `measures` - Organized measures (optional)
+- `tempo` - BPM
+- `time_signature` - (numerator, denominator)
+- `key_signature` - e.g. "C major"
 
-┌────────────────────────────────────────────────────────────────┐
-│                      PROCESSING PIPELINE                        │
-└────────────────────────────────────────────────────────────────┘
+**Methods:**
+- `organize_into_measures()` - Create measure structure
+- `apply_tied_notes()` - Split notes across bars
+- `infer_expression_marks()` - Auto dynamics/articulation
 
-Model Predictions
-[MIDI numbers]
-    │
-    ▼
-┌──────────────────┐
-│  NoteBuilder     │
-│  + build_from_   │
-│    predictions() │
-└────────┬─────────┘
-         │
-         │ uses
-         ▼
-┌──────────────────┐         ┌──────────────────┐
-│ QuantizationConf │────────>│  Quantizer       │
-│ - resolution     │         │  + quantize()    │
-│ - auto_tempo     │         │  + detect_tempo()│
-└──────────────────┘         └────────┬─────────┘
-                                      │
-                                      │ creates
-                                      ▼
-                             ┌────────────────┐
-                             │  Quantized     │
-                             │  NoteSequence  │
-                             └────────┬───────┘
-                                      │
-                                      │
-         ┌────────────────────────────┼────────────────────────────┐
-         │                            │                            │
-         ▼                            ▼                            ▼
-┌────────────────┐         ┌──────────────────┐       ┌──────────────────┐
-│ JSONConverter  │         │  MIDIConverter   │       │ MusicXMLConverter│
-│ + export()     │         │  + export()      │       │ + export()       │
-└────────┬───────┘         └────────┬─────────┘       └────────┬─────────┘
-         │                          │                           │
-         ▼                          ▼                           ▼
-┌────────────────┐         ┌──────────────────┐       ┌──────────────────┐
-│  JSON File     │         │  MIDI File       │       │  MusicXML File   │
-│  (metadata +   │         │  (playback)      │       │  (score)         │
-│   notes)       │         └──────────────────┘       └──────────────────┘
-└────────────────┘
+### Quantizer
+Timing quantization and music analysis.
 
+**Features:**
+- `quantize()` - Snap to rhythmic grid
+- `detect_tempo()` - Auto BPM detection (IOI-based)
+- `detect_key_signature()` - Krumhansl-Schmuckler algorithm
+- `detect_time_signature()` - Pattern recognition
 
-┌────────────────────────────────────────────────────────────────┐
-│                     DETECTION ALGORITHMS                        │
-└────────────────────────────────────────────────────────────────┘
+### Converters
+Export to multiple formats.
 
-┌──────────────────────────────────────────────────────────────┐
-│  Tempo Detection                                             │
-│  1. Calculate inter-onset intervals (IOIs)                   │
-│  2. Find common divisors (beat candidates)                   │
-│  3. Select most frequent tempo (60-180 BPM range)            │
-└──────────────────────────────────────────────────────────────┘
+**Available:**
+- `JSONConverter` - Full metadata + notes
+- `MIDIConverter` - Playback MIDI
+- `MusicXMLConverter` - Score notation with ties/expression
+## Usage
 
-┌──────────────────────────────────────────────────────────────┐
-│  Key Signature Detection (Krumhansl-Schmuckler)              │
-│  1. Build pitch class distribution                           │
-│  2. Correlate with major/minor profiles                      │
-│  3. Select key with highest correlation                      │
-└──────────────────────────────────────────────────────────────┘
+### Build NoteSequence from Events
 
-┌──────────────────────────────────────────────────────────────┐
-│  Time Signature Detection                                    │
-│  1. Quantize notes to beat grid                              │
-│  2. Find repeating patterns                                  │
-│  3. Detect measure boundaries                                │
-│  4. Infer time signature (4/4, 3/4, 6/8, 2/4)               │
-└──────────────────────────────────────────────────────────────┘
+```python
+from src.converter import NoteSequence, Note
+
+# From model predictions (events)
+events = [
+    {'pitch': 60, 'onset_time_ms': 0, 'offset_time_ms': 1000, 'velocity': 80},
+    {'pitch': 62, 'onset_time_ms': 1000, 'offset_time_ms': 2000, 'velocity': 75},
+]
+
+notes = [
+    Note(
+        pitch=e['pitch'],
+        start_time=e['onset_time_ms'] / 1000.0,
+        duration=(e['offset_time_ms'] - e['onset_time_ms']) / 1000.0,
+        velocity=e.get('velocity', 80)
+    )
+    for e in events
+]
+
+sequence = NoteSequence(
+    notes=notes,
+    tempo=120,
+    time_signature=(4, 4),
+    key_signature="C major"
+)
 ```
 
-## Class Dependencies
+### Quantization
 
-1. **Note**: Basic note representation with expression
-2. **Measure** → **Note**: Contains multiple notes
-3. **NoteSequence** → **Note** + **Measure**: Contains notes and measures
-4. **QuantizationConfig** → **Quantizer**: Configuration for quantization
-5. **Quantizer** → **NoteSequence**: Quantizes timing
-6. **NoteBuilder** → **Quantizer** + **NoteSequence**: Orchestrates conversion
-7. **Converters** → **NoteSequence**: Export to different formats
+```python
+from src.converter import Quantizer, QuantizationConfig
 
-## Core Components
+config = QuantizationConfig(
+    resolution=16,  # 16th note grid
+    auto_tempo=True
+)
 
-### 1. Note
-Represents a single musical note with:
-- **Basic attributes**: pitch, start_time, duration, velocity
-- **Tied notes**: is_tied_start, is_tied_end, tie_group_id
-- **Expression**: dynamic (ppp-fff), articulation (staccato, legato, etc.)
-- **Methods**: to_dict(), infer_dynamic_from_velocity()
+quantizer = Quantizer(config)
+quantized_seq = quantizer.quantize(sequence)
+```
 
-### 2. Measure
-Represents a musical bar/measure:
-- **number**: 1-indexed measure number
-- **start_time**: Measure start in seconds
-- **duration**: Measure duration in seconds
-- **time_signature**: (numerator, denominator)
-- **notes**: List of notes in this measure
+### Export to MIDI
 
-### 3. NoteSequence
-Collection of notes with metadata:
-- **notes**: List of all notes
-- **measures**: List of measures (optional)
-- **tempo**: BPM
-- **time_signature**: (numerator, denominator)
-- **key_signature**: Key string (e.g., "C major")
-- **Advanced methods**:
-  - organize_into_measures(): Create measure structure
-  - apply_tied_notes(): Split notes across measure boundaries
-  - infer_expression_marks(): Automatic dynamics/articulation
+```python
+from src.converter import MIDIConverter
 
-### 4. Quantizer
-Timing quantization and tempo detection:
-- **quantize()**: Snap note timings to grid
-- **detect_tempo()**: Automatic tempo detection from IOIs
-- **detect_key_signature()**: Krumhansl-Schmuckler algorithm
-- **detect_time_signature()**: Pattern-based detection
+converter = MIDIConverter(quantized_seq)
+converter.export("output.mid")
+```
 
-### 5. NoteBuilder
-Orchestrates conversion pipeline:
-- Parse predictions to notes
-- Detect tempo (optional)
-- Quantize timing
-- Validate musical correctness
-- Build final sequence
+### Export to MusicXML
 
-### 6. Converters
-Export to multiple formats:
-- **JSONConverter**: Full metadata + notes
-- **MIDIConverter**: Playback-ready MIDI
-- **MusicXMLConverter**: Score notation with ties and expression
+```python
+from src.converter import MusicXMLConverter
+
+# With ties and expression
+sequence.organize_into_measures()
+sequence.apply_tied_notes()
+sequence.infer_expression_marks()
+
+converter = MusicXMLConverter(sequence)
+converter.export("output.musicxml")
+```
+
+### Export to JSON
+
+```python
+from src.converter import JSONConverter
+
+converter = JSONConverter(sequence)
+converter.export("output.json")
+```
 
 ## Usage Examples
 
@@ -261,107 +197,39 @@ from src.converter import MIDIConverter
 
 # Build sequence
 sequence = builder.build_from_predictions(predictions, tempo=120)
+## Music Analysis
 
-# Export to MIDI
-converter = MIDIConverter()
-converter.export(sequence, "output.mid")
-print("MIDI file saved!")
+**Tempo Detection:**
+1. Calculate inter-onset intervals (IOIs)
+2. Find common divisors (beat candidates)
+3. Select most frequent tempo (60-180 BPM)
+
+**Key Signature Detection (Krumhansl-Schmuckler):**
+1. Build pitch class distribution
+2. Correlate with major/minor profiles
+3. Select key with highest correlation
+
+**Time Signature Detection:**
+1. Quantize to beat grid
+2. Find repeating patterns
+3. Detect measure boundaries
+4. Infer time signature (4/4, 3/4, 6/8, 2/4)
+
+## Expression Marks
+
+**Dynamics (8 levels):**
+PPP, PP, P, MP, MF, F, FF, FFF (auto-inferred from velocity)
+
+**Articulation (6 types):**
+STACCATO, LEGATO, ACCENT, TENUTO, MARCATO, SFORZANDO
+
+## Testing
+
+```bash
+pytest tests/converter/ -v --cov=src.converter
 ```
 
-### Export to MusicXML (Score)
-
-```python
-from src.converter import MusicXMLConverter
-
-# Build sequence with expression
-sequence = builder.build_from_predictions(predictions, tempo=120)
-
-# Infer expression marks (dynamics, articulation)
-sequence.infer_expression_marks()
-
-# Export to MusicXML
-converter = MusicXMLConverter()
-converter.export(sequence, "output.musicxml")
-print("MusicXML score saved!")
-```
-
-### Advanced: Measures and Tied Notes
-
-```python
-from src.converter import NoteBuilder
-
-builder = NoteBuilder()
-
-# Build sequence
-sequence = builder.build_from_predictions(
-    predictions,
-    tempo=120,
-    time_signature=(4, 4)
-)
-
-# Organize into measures
-sequence.organize_into_measures()
-print(f"Total measures: {len(sequence.measures)}")
-
-# Apply tied notes (split notes across measure boundaries)
-sequence.apply_tied_notes()
-
-# Export with ties
-from src.converter import MusicXMLConverter
-converter = MusicXMLConverter()
-converter.export(sequence, "output_with_ties.musicxml")
-```
-
-### Expression Marks (Dynamics & Articulation)
-
-```python
-from src.converter import Note, Dynamic, Articulation
-
-# Manual expression
-note = Note(
-    pitch=60,
-    start_time=0.0,
-    duration=0.5,
-    velocity=100,
-    dynamic=Dynamic.F,           # Forte
-    articulation=Articulation.STACCATO
-)
-
-# Or infer from velocity
-note = Note(pitch=60, start_time=0.0, duration=0.5, velocity=100)
-note.infer_dynamic_from_velocity()
-print(f"Inferred dynamic: {note.dynamic}")  # F (forte)
-
-# Automatic inference for all notes
-sequence.infer_expression_marks()
-```
-
-### Complete Pipeline with All Features
-
-```python
-from src.converter import (
-    NoteBuilder,
-    QuantizationConfig,
-    MIDIConverter,
-    MusicXMLConverter,
-    JSONConverter
-)
-
-# Configuration
-config = QuantizationConfig(
-    resolution=16,
-    auto_tempo_detection=True,
-    snap_threshold=0.1
-)
-
-# Build sequence
-builder = NoteBuilder(quantization_config=config)
-sequence = builder.build_from_predictions(predictions)
-
-# Add advanced features
-sequence.organize_into_measures()      # Create measures
-sequence.apply_tied_notes()            # Handle ties
-sequence.infer_expression_marks()      # Add dynamics/articulation
+**Coverage:** 329 tests, 97% coverage
 
 # Export to all formats
 json_converter = JSONConverter()
