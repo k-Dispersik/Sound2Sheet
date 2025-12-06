@@ -1,126 +1,47 @@
-# Evaluation System
+# Evaluation: Metrics & Visualization
 
-## Overview
+Comprehensive evaluation system for piano transcription model assessment.
 
-Comprehensive evaluation system for assessing music transcription model performance. Provides metrics calculation, batch evaluation, statistical analysis, report generation, and visualization tools.
+## Components
 
-## Architecture
+### MetricCalculator
+Computes transcription metrics with configurable tolerances.
 
-```
-┌─────────────────────┐
-│  EvaluationConfig   │
-│  - onset_tolerance  │
-│  - offset_tolerance │
-│  - pitch_tolerance  │
-└──────────┬──────────┘
-           │
-           │ configures
-           ▼
-┌─────────────────────┐         ┌──────────────────────┐
-│  MetricCalculator   │◄────────│  EvaluationMetrics   │
-│  + calculate_metrics│         │  (dataclass)         │
-│  + match_notes      │         │  - note_accuracy     │
-│  + calculate_f1     │         │  - onset_f1          │
-└──────────┬──────────┘         │  - pitch_f1          │
-           │                    │  - timing_error      │
-           │                    └──────────────────────┘
-           │ uses
-           ▼
-┌─────────────────────────────┐         ┌──────────────────────┐
-│  Evaluator                  │◄────────│  SampleEvaluation    │
-│  + evaluate_sample()        │         │  - sample_id         │
-│  + evaluate_batch()         │         │  - metrics           │
-│  + get_aggregated_metrics() │         │  - predicted_notes   │
-│  + get_error_analysis()     │         │  - ground_truth      │
-│  + save_results()           │         └──────────────────────┘
-└─────────────┬───────────────┘
-              │
-              │ used by
-              ├──────────────────┬────────────────────┐
-              ▼                  ▼                    ▼
-    ┌──────────────────┐  ┌──────────────┐  ┌─────────────────┐
-    │ ReportGenerator  │  │  Visualizer  │  │  CLI Interface  │
-    │  + generate()    │  │  + dashboard │  │  - evaluate     │
-    │  - CSV export    │  │  + confusion │  │  - report       │
-    │  - JSON export   │  │  + plots     │  │  - visualize    │
-    └──────────────────┘  └──────────────┘  └─────────────────┘
-```
+**Metrics:**
+- Note-level: accuracy, precision, recall, F1
+- Onset metrics: precision, recall, F1
+- Offset metrics: precision, recall, F1
+- Pitch metrics: precision, recall, F1
+- Timing errors: mean, std deviation
 
-## Class Dependencies
+### Evaluator
+Orchestrates batch evaluation and aggregation.
 
-1. **EvaluationConfig** → **MetricCalculator**: Configuration used by calculator
-2. **EvaluationConfig** → **Evaluator**: Configuration used by evaluator
-3. **MetricCalculator** → **EvaluationMetrics**: Calculator produces metrics
-4. **Evaluator** → **MetricCalculator**: Evaluator uses calculator internally
-5. **Evaluator** → **SampleEvaluation**: Evaluator creates sample results
-6. **ReportGenerator** ← **Evaluator**: Generator reads evaluator results
-7. **Visualizer** ← **Evaluator**: Visualizer reads evaluator results
-
-## Core Components
-
-### 1. Note (dataclass)
-Simple note representation for evaluation:
-- `pitch`: MIDI note number (0-127)
-- `onset`: Start time in seconds
-- `offset`: End time in seconds
-- `velocity`: MIDI velocity (0-127)
-
-### 2. EvaluationMetrics (dataclass)
-Container for all evaluation metrics:
-- **Note-level**: `note_accuracy` (percentage of correct notes)
-- **Onset metrics**: `onset_precision`, `onset_recall`, `onset_f1`
-- **Offset metrics**: `offset_precision`, `offset_recall`, `offset_f1`
-- **Pitch metrics**: `pitch_precision`, `pitch_recall`, `pitch_f1`
-- **Timing**: `timing_error_mean`, `timing_error_std`
-- **Tempo**: `tempo_error` (relative error)
-- **Error counts**: `true_positives`, `false_positives`, `false_negatives`
-- **Distributions**: `pitch_errors` (per-pitch error counts)
-
-### 3. MetricCalculator
-Calculates comprehensive evaluation metrics:
-- Note matching with configurable tolerances
-- F1-score, precision, recall calculation
-- Timing deviation analysis
-- Pitch error distribution
-- Tempo accuracy evaluation
-
-### 4. Evaluator
-Orchestrates evaluation process:
+**Features:**
 - Single sample evaluation
-- Batch evaluation with progress tracking
-- Aggregated statistics (mean, std, min, max)
+- Batch processing with progress tracking
+- Aggregated statistics (mean/std/min/max)
 - Error analysis and distributions
 - Results persistence (JSON)
 
-### 5. ReportGenerator
-Generates evaluation reports:
-- **CSV format**: Sample-level metrics table
-- **JSON format**: Complete results with metadata
+### Visualizer
+Visual analysis tools.
 
-### 6. Visualizer
-Creates visual analysis:
-- Comprehensive dashboard (6 plots in one figure)
+**Plots:**
+- Comprehensive dashboard (6 plots)
 - Confusion matrix for pitch predictions
-- Metrics over time plots
-- Error distribution charts
+- Metrics over time
+- Error distributions
 
-### 7. CLI Interface
-Command-line tool for evaluation:
-- `evaluate`: Run evaluation on samples
-- `report`: Generate reports from results
-- `visualize`: Create visualization plots
-
-## Usage Examples
+## Usage
 
 ### Basic Evaluation
 
 ```python
-from src.evaluation import Evaluator, MetricCalculator, Note
+from src.evaluation import Evaluator, Note
 
-# Create evaluator
 evaluator = Evaluator()
 
-# Define notes
 predicted = [
     Note(pitch=60, onset=0.0, offset=1.0, velocity=80),
     Note(pitch=62, onset=1.0, offset=2.0, velocity=75),
@@ -128,19 +49,13 @@ predicted = [
 
 ground_truth = [
     Note(pitch=60, onset=0.0, offset=1.0, velocity=80),
-    Note(pitch=62, onset=1.02, offset=2.0, velocity=70),  # Slightly off onset
+    Note(pitch=62, onset=1.02, offset=2.0, velocity=70),
 ]
 
-# Evaluate single sample
-result = evaluator.evaluate_sample(
-    sample_id="test_001",
-    predicted_notes=predicted,
-    ground_truth_notes=ground_truth
-)
+result = evaluator.evaluate_sample("test_001", predicted, ground_truth)
 
 print(f"Accuracy: {result.metrics.note_accuracy:.3f}")
 print(f"Onset F1: {result.metrics.onset_f1:.3f}")
-print(f"Pitch F1: {result.metrics.pitch_f1:.3f}")
 ```
 
 ### Batch Evaluation
@@ -148,56 +63,36 @@ print(f"Pitch F1: {result.metrics.pitch_f1:.3f}")
 ```python
 from src.evaluation import Evaluator, EvaluationConfig
 
-# Create evaluator with custom tolerances
 config = EvaluationConfig(
-    onset_tolerance=0.05,  # 50ms tolerance for onset
-    offset_tolerance=0.05,
-    pitch_tolerance=0      # Exact pitch matching
+    onset_tolerance=0.05,  # 50ms
+    offset_tolerance=0.05
 )
 evaluator = Evaluator(config)
 
-# Prepare samples
 samples = [
     {
-        'sample_id': f'sample_{i:03d}',
-        'predicted_notes': load_predicted_notes(f'pred_{i}.json'),
-        'ground_truth_notes': load_ground_truth_notes(f'gt_{i}.json'),
-        'predicted_tempo': 120.0,
-        'ground_truth_tempo': 120.0,
+        'sample_id': f'sample_{i}',
+        'predicted_notes': pred_notes[i],
+        'ground_truth_notes': gt_notes[i]
     }
     for i in range(100)
 ]
 
-# Evaluate batch with progress tracking
-def progress(current, total):
-    print(f"Progress: {current}/{total}")
-
-results = evaluator.evaluate_batch(samples, progress_callback=progress)
-
-# Get aggregated metrics
+results = evaluator.evaluate_batch(samples)
 agg = evaluator.get_aggregated_metrics()
-print(f"Mean Accuracy: {agg.mean_metrics.note_accuracy:.3f} ± {agg.std_metrics.note_accuracy:.3f}")
-print(f"Mean Onset F1: {agg.mean_metrics.onset_f1:.3f} ± {agg.std_metrics.onset_f1:.3f}")
 
-# Get error analysis
-error_analysis = evaluator.get_error_analysis()
-print(f"Total TP: {error_analysis['total_true_positives']}")
-print(f"Total FP: {error_analysis['total_false_positives']}")
-print(f"Total FN: {error_analysis['total_false_negatives']}")
-
-# Save results
-evaluator.save_results('evaluation_results.json')
+print(f"Mean F1: {agg.mean_metrics.onset_f1:.3f}")
 ```
 
-### Custom Metric Calculator
+### Visualization
 
 ```python
-from src.evaluation.metrics import MetricCalculator, Note
+from src.evaluation import Visualizer
 
-# Create calculator with custom tolerances
-calculator = MetricCalculator(
-    onset_tolerance=0.1,   # 100ms tolerance
-    offset_tolerance=0.1,
+viz = Visualizer()
+viz.plot_dashboard(evaluator.results, save_path="dashboard.png")
+viz.plot_confusion_matrix(evaluator.results, save_path="confusion.png")
+```
     pitch_tolerance=1      # ±1 semitone tolerance
 )
 
@@ -303,107 +198,38 @@ python -m src.evaluation.cli visualize \
       "ground_truth_path": "ground_truth/test_001.json",
       "predicted_tempo": 120.0,
       "ground_truth_tempo": 120.0,
-      "metadata": {
-        "duration": 3.0,
-        "audio_path": "audio/test_001.wav"
-      }
-    }
-  ]
-}
-```
+## Configuration
 
-### Notes JSON Format
-
-```json
-{
-  "notes": [
-    {
-      "pitch": 60,
-      "onset": 0.0,
-      "offset": 1.0,
-      "velocity": 80
-    },
-    {
-      "pitch": 62,
-      "onset": 1.0,
-      "offset": 2.0,
-      "velocity": 75
-    }
-  ]
-}
-```
-
-### Evaluation Summary
-
+**EvaluationConfig:**
 ```python
-# Print human-readable summary
-print(evaluator.get_summary())
+onset_tolerance: float = 0.05    # 50ms onset tolerance
+offset_tolerance: float = 0.05   # 50ms offset tolerance
+pitch_tolerance: int = 0         # Exact pitch matching
 ```
 
-Output:
-```
-============================================================
-EVALUATION SUMMARY
-============================================================
-Number of samples: 100
-Total predicted notes: 1523
-Total ground truth notes: 1500
+## Metrics
 
-AGGREGATED METRICS (Mean ± Std):
-------------------------------------------------------------
-Note Accuracy:     0.876 ± 0.043
-Onset F1:          0.912 ± 0.038
-Offset F1:         0.854 ± 0.052
-Pitch F1:          0.923 ± 0.031
-Timing Error (ms): 23.5 ± 12.3
+**Calculated:**
+- `note_accuracy` - Percentage of correctly matched notes
+- `onset_f1` - F1 score for onset detection
+- `offset_f1` - F1 score for offset detection
+- `pitch_f1` - F1 score for pitch detection
+- `timing_error_mean` - Average timing deviation (ms)
+- `timing_error_std` - Timing deviation std (ms)
+- `tempo_error` - Relative tempo error
 
-ERROR ANALYSIS:
-------------------------------------------------------------
-True Positives:    1368
-False Positives:   155
-False Negatives:   132
-============================================================
+**Error Counts:**
+- `true_positives` - Correctly predicted notes
+- `false_positives` - Incorrectly predicted notes
+- `false_negatives` - Missed notes
+
+## Testing
+
+```bash
+pytest tests/evaluation/ -v --cov=src.evaluation
 ```
 
-## API Reference
-
-### MetricCalculator
-
-```python
-MetricCalculator(
-    onset_tolerance: float = 0.05,
-    offset_tolerance: float = 0.05,
-    pitch_tolerance: int = 0
-)
-```
-
-**Methods:**
-- `calculate_metrics(predicted_notes, ground_truth_notes, predicted_tempo=None, ground_truth_tempo=None) -> EvaluationMetrics`
-
-### Evaluator
-
-```python
-Evaluator(config: Optional[EvaluationConfig] = None)
-```
-
-**Methods:**
-- `evaluate_sample(sample_id, predicted_notes, ground_truth_notes, predicted_tempo=None, ground_truth_tempo=None, metadata=None) -> SampleEvaluation`
-- `evaluate_batch(samples, progress_callback=None) -> List[SampleEvaluation]`
-- `get_aggregated_metrics() -> AggregatedMetrics`
-- `get_error_analysis() -> Dict[str, Any]`
-- `save_results(output_path: str) -> None`
-- `load_results(input_path: str) -> None`
-- `clear_results() -> None`
-- `get_summary() -> str`
-
-### ReportGenerator
-
-```python
-ReportGenerator(evaluator: Evaluator)
-```
-
-**Methods:**
-- `generate_report(output_path: str, format: ReportFormat = ReportFormat.JSON) -> None`
+**Coverage:** 53 tests, 100% coverage
 
 **Formats:**
 - `ReportFormat.JSON`: Complete results with all metadata
