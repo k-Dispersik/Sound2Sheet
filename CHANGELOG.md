@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Nothing yet
+
+### Changed
+- Nothing yet
+
+### Fixed
+- Nothing yet
+
+## [0.7.2] - 2025-12-06
+
+### Added
+- **Pipeline Configuration:** New JSON-based configuration system (`config.json`)
+  - Main pipeline runner (`run_pipeline.py`) for end-to-end training
+  - Support for experiment configuration with dataset, model, training parameters
+  - Automatic dataset generation with configurable complexity distribution
+
+### Changed
+- **Configuration Format:** Migrated from YAML to JSON for pipeline configuration
+  - Removed `src/pipeline/config.yaml` and `config_test.yaml`
+  - Added `config.json` with comprehensive experiment settings
+  - Removed `src/pipeline/README.md` (legacy pipeline documentation)
+- **Trainer Updates:** 
+  - Fixed deprecated `torch.cuda.amp.GradScaler` → `torch.amp.GradScaler`
+  - `GradScaler` now properly initialized with device type for CPU/CUDA compatibility
+  - `pin_memory` setting now conditional on CUDA availability (removes warning on CPU)
+- **DataLoader Optimization:**
+  - Pin memory only enabled when CUDA is available
+  - Proper device-aware configuration for efficient data loading
+
+### Fixed
+- UserWarning for `pin_memory` on CPU-only systems
+- FutureWarning for deprecated `torch.cuda.amp.GradScaler`
+- Proper handling of device types in mixed precision training
+
+### Performance
+- Improved data loading efficiency with smart pin_memory configuration
+- Better CPU/GPU compatibility in training pipeline
+
+## [0.7.1] - 2025-11-24
+
 ### Changed
 - **Trainer Refactor:** Removed all internal logging from `Trainer` class and split large methods into smaller, testable functions
 - Improved device setup and mixed precision handling in `Trainer`
@@ -14,12 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ModelConfig signature updated (removed obsolete `num_attention_heads`)
 - Integration test updated to expect 2D piano roll output
 
-## [0.7.1] - 2025-11-24
-
-### Changed
-- See below for details of Trainer refactor, test fixes, and model training improvements
-
-## [Unreleased]
+### Fixed
 - All test failures after refactor (parameter mismatch, tensor type errors, output shape mismatch)
 - `torch.nn.functional.interpolate` now works with float tensors for piano roll resizing
 - Tests now match new ModelConfig and Trainer signatures
