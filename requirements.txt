@@ -8,6 +8,7 @@ pyyaml>=6.0  # Configuration files
 librosa>=0.10.0  # Audio analysis and mel-spectrogram generation
 soundfile>=0.12.0  # WAV file I/O
 audioread>=3.0.0  # Multi-format audio support (requires ffmpeg for m4a)
+midi2audio>=0.1.1  # MIDI to audio conversion (requires FluidSynth)
 
 # Deep Learning
 torch>=2.0.0  # Deep learning framework
@@ -27,6 +28,7 @@ pytest>=7.4.0  # Test framework
 pytest-cov>=4.1.0  # Test coverage reports
 pytest-xdist>=3.3.0  # Parallel test execution
 pytest-timeout>=2.1.0  # Test timeout handling
+
 
 # Optional Dependencies (commented out - install if needed)
 # accelerate>=0.20.0  # Mixed precision and distributed training for PyTorch
