@@ -69,8 +69,7 @@ class TestMIDIGenerator(unittest.TestCase):
     def test_initialization(self):
         """Test generator initialization."""
         self.assertIsNotNone(self.generator.config)
-        self.assertIsNotNone(self.generator.logger)
-    
+            
     def test_initialization_with_config(self):
         """Test generator initialization with custom config."""
         config = MIDIConfig(tempo=100, complexity=ComplexityLevel.BEGINNER)

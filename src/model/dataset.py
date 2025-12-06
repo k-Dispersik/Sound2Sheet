@@ -329,8 +329,6 @@ def create_dataloaders(
     Returns:
         Tuple of (train_loader, val_loader, test_loader)
     """
-    # Get manifest paths from dataset directory
-    # Try metadata subdirectory first (new format), then root (legacy)
     metadata_dir = data_config.dataset_dir / 'metadata'
     if metadata_dir.exists():
         train_manifest = metadata_dir / 'train_manifest.json'

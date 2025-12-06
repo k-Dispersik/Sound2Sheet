@@ -4,8 +4,8 @@ Model configuration for Sound2Sheet.
 Defines configuration classes for model architecture, training, and inference.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, List
+from dataclasses import dataclass
+from typing import Optional
 from pathlib import Path
 
 
