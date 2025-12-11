@@ -1,5 +1,4 @@
 import json
-from matplotlib.path import Path
 import torch
 from transformers import Trainer
 from src.model.sound2sheet_model import Sound2SheetModel
@@ -51,7 +50,10 @@ def create_loader(config, model_config):
         checkpoint_dir=f'{config["experiment_name"]}/checkpoints',
         log_dir=f'{config["experiment_name"]}/logs',
         save_every_n_epochs=config["training"]["save_every_n_epochs"],
-        early_stopping_patience=config["training"]["early_stopping_patience"]
+        early_stopping_patience=config["training"]["early_stopping_patience"],
+        num_workers=config["training"].get("num_workers", 4),
+        pin_memory=config["training"].get("pin_memory", True),
+        prefetch_factor=config["training"].get("prefetch_factor", 2)
     )
 
     # Data configuration

@@ -36,8 +36,11 @@
         "lr_scheduler_type": "cosine",
         "use_mixed_precision": true,
         "max_grad_norm": 1.0,
-        "gradient_accumulation_steps": 4,
+        "gradient_accumulation_steps": 1,
         "save_every_n_epochs": 10,
-        "early_stopping_patience": 10
+        "early_stopping_patience": 10,
+        "num_workers": 8,
+        "pin_memory": true,
+        "prefetch_factor": 4
     }
 }
