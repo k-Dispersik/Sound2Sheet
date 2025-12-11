@@ -91,6 +91,7 @@ class Trainer:
         
         # History
         self.train_losses = []
+        self.train_accuracies = []
         self.val_losses = []
         self.val_accuracies = []
         self.learning_rates = []
@@ -132,20 +133,36 @@ class Trainer:
         """
         for epoch in range(self.current_epoch, self.config.num_epochs):
             self.current_epoch = epoch
-            train_loss = self._train_epoch()
+            
+            # Get current learning rate
+            current_lr = self.optimizer.param_groups[0]['lr']
+            
+            # Train
+            train_loss, train_acc = self._train_epoch(current_lr)
             self.train_losses.append(train_loss)
+            self.train_accuracies.append(train_acc)
+            
+            # Validate
             val_loss, val_metrics = self._validate_epoch()
             self.val_losses.append(val_loss)
             self.val_accuracies.append(val_metrics['accuracy'])
-            current_lr = self.optimizer.param_groups[0]['lr']
+            
+            # Learning rate
             self.learning_rates.append(current_lr)
+            
+            # Checkpointing
             self._handle_checkpointing(epoch, val_loss)
+            
+            # Early stopping
             if self._should_stop_early():
                 break
+        
         self._save_checkpoint("final_model.pt")
         self._save_history()
+        
         return {
             'train_losses': self.train_losses,
+            'train_accuracies': self.train_accuracies,
             'val_losses': self.val_losses,
             'val_accuracies': self.val_accuracies,
             'learning_rates': self.learning_rates,
@@ -168,26 +185,60 @@ class Trainer:
         """Check early stopping condition."""
         return self.epochs_without_improvement >= self.config.early_stopping_patience
     
-    def _train_epoch(self) -> float:
-        """Train for one epoch. Returns average training loss."""
+    def _train_epoch(self, current_lr) -> Tuple[float, float]:
+        """Train for one epoch. Returns (average training loss, average training accuracy)."""
         self.model.train()
         total_loss = 0.0
         num_batches = 0
+        all_predictions = []
+        all_targets = []
+        
         progress_bar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")
         for batch_idx, batch in enumerate(progress_bar):
-            loss = self._process_train_batch(batch)
+            loss, predictions, targets = self._process_train_batch(batch)
             total_loss += loss * self.config.gradient_accumulation_steps
             num_batches += 1
-            progress_bar.set_postfix({'loss': loss * self.config.gradient_accumulation_steps})
+            all_predictions.append(predictions)
+            all_targets.append(targets)
+            
+            # Compute running accuracy
+            if len(all_predictions) > 0:
+                temp_preds = torch.cat(all_predictions, dim=0)
+                temp_targets = torch.cat(all_targets, dim=0)
+                correct = (temp_preds.reshape(-1) == temp_targets.reshape(-1)).sum().item()
+                total = temp_preds.numel()
+                running_acc = correct / total if total > 0 else 0.0
+            else:
+                running_acc = 0.0
+            
+            avg_loss_so_far = total_loss / num_batches
+            progress_bar.set_postfix({
+                'tr_loss': f'{avg_loss_so_far:.3f}',
+                'tr_acc': f'{running_acc:.2f}',
+                'lr': f'{current_lr:.4f}'
+            })
+        
         if num_batches == 0:
-            return 0.0
+            return 0.0, 0.0
+        
         avg_loss = total_loss / num_batches
-        return avg_loss
+        
+        # Compute final training accuracy
+        all_predictions = torch.cat(all_predictions, dim=0)
+        all_targets = torch.cat(all_targets, dim=0)
+        predictions_flat = all_predictions.reshape(-1)
+        targets_flat = all_targets.reshape(-1)
+        correct = (predictions_flat == targets_flat).sum().item()
+        total = predictions_flat.numel()
+        train_accuracy = correct / total if total > 0 else 0.0
+        
+        return avg_loss, train_accuracy
 
-    def _process_train_batch(self, batch) -> float:
-        """Process a single training batch and update model weights."""
+    def _process_train_batch(self, batch) -> Tuple[float, torch.Tensor, torch.Tensor]:
+        """Process a single training batch and update model weights. Returns (loss, predictions, targets)."""
         mel = batch['mel'].to(self.device)
         piano_roll = batch['piano_roll'].to(self.device)
+        
         if self.config.use_mixed_precision:
             with autocast(self.device.type):
                 logits, piano_roll_resized = self._forward_and_resize(mel, piano_roll)
@@ -197,14 +248,24 @@ class Trainer:
             logits, piano_roll_resized = self._forward_and_resize(mel, piano_roll)
             loss = self.criterion(logits, piano_roll_resized)
             loss = loss / self.config.gradient_accumulation_steps
+        
         if self.config.use_mixed_precision:
             self.scaler.scale(loss).backward()
         else:
             loss.backward()
+        
         if (self.global_step + 1) % self.config.gradient_accumulation_steps == 0:
             self._update_weights()
+        
         self.global_step += 1
-        return loss.item()
+        
+        # Get predictions for accuracy calculation
+        with torch.no_grad():
+            probs = torch.sigmoid(logits)
+            predictions = (probs >= self.model_config.classification_threshold).float().cpu()
+            targets = piano_roll_resized.cpu()
+        
+        return loss.item(), predictions, targets
 
     def _forward_and_resize(self, mel, piano_roll):
         """Forward pass and resize piano_roll to match logits temporal dimension."""
@@ -242,15 +303,35 @@ class Trainer:
         num_batches = 0
         all_predictions = []
         all_targets = []
+        
+        progress_bar = tqdm(self.val_loader, desc="Validation")
         with torch.no_grad():
-            for batch in tqdm(self.val_loader, desc="Validation"):
+            for batch in progress_bar:
                 loss, predictions, targets = self._process_val_batch(batch)
                 total_loss += loss
                 num_batches += 1
                 all_predictions.append(predictions)
                 all_targets.append(targets)
+                
+                # Compute running accuracy
+                if len(all_predictions) > 0:
+                    temp_preds = torch.cat(all_predictions, dim=0)
+                    temp_targets = torch.cat(all_targets, dim=0)
+                    correct = (temp_preds.reshape(-1) == temp_targets.reshape(-1)).sum().item()
+                    total = temp_preds.numel()
+                    running_acc = correct / total if total > 0 else 0.0
+                else:
+                    running_acc = 0.0
+                
+                avg_loss_so_far = total_loss / num_batches
+                progress_bar.set_postfix({
+                    'val_loss': f'{avg_loss_so_far:.3f}',
+                    'val_acc': f'{running_acc:.2f}'
+                })
+        
         if num_batches == 0:
             return 0.0, {'accuracy': 0.0, 'f1': 0.0, 'precision': 0.0, 'recall': 0.0}
+        
         avg_loss = total_loss / num_batches
         metrics = self._compute_metrics(all_predictions, all_targets, avg_loss)
         return avg_loss, metrics
