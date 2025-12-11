@@ -10,7 +10,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import autocast
 from torch.amp import GradScaler
-from pathlib import Path
 from typing import Dict, Optional, Tuple
 import logging
 from tqdm import tqdm
@@ -259,11 +258,11 @@ class Trainer:
         
         self.global_step += 1
         
-        # Get predictions for accuracy calculation
+        # Get predictions for accuracy calculation (keep on GPU)
         with torch.no_grad():
             probs = torch.sigmoid(logits)
-            predictions = (probs >= self.model_config.classification_threshold).float().cpu()
-            targets = piano_roll_resized.cpu()
+            predictions = (probs >= self.model_config.classification_threshold).float()
+            targets = piano_roll_resized
         
         return loss.item(), predictions, targets
 
@@ -343,8 +342,8 @@ class Trainer:
         logits, piano_roll_resized = self._forward_and_resize(mel, piano_roll)
         loss = self.criterion(logits, piano_roll_resized).item()
         probs = torch.sigmoid(logits)
-        predictions = (probs >= self.model_config.classification_threshold).float().cpu()
-        targets = piano_roll_resized.cpu()
+        predictions = (probs >= self.model_config.classification_threshold).float()
+        targets = piano_roll_resized
         return loss, predictions, targets
 
     def _compute_metrics(self, all_predictions, all_targets, avg_loss):

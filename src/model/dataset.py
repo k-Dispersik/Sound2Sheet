@@ -366,6 +366,7 @@ def create_dataloaders(
     loader_kwargs = {
         'num_workers': training_config.num_workers,
         'pin_memory': training_config.pin_memory and torch.cuda.is_available(),
+        'persistent_workers': training_config.num_workers > 0,  # Keep workers alive between epochs
     }
     if training_config.num_workers > 0:
         loader_kwargs['prefetch_factor'] = training_config.prefetch_factor
