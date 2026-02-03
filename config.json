@@ -17,7 +17,8 @@
         "num_classifier_layers": 2,
         "classifier_hidden_dim": 256,
         "use_temporal_conv": true,
-        "temporal_conv_kernel": 5
+        "temporal_conv_kernel": 5,
+        "freeze_encoder": false
     },
     "data_config": {
         "sample_rate": 16000,
@@ -29,18 +30,18 @@
         "mel_normalize": true
     },
     "training": {
-        "batch_size": 32,
+        "batch_size": 8,
         "num_epochs": 50,
         "learning_rate": 0.0001,
         "optimizer": "adamw",
         "lr_scheduler_type": "cosine",
         "use_mixed_precision": true,
         "max_grad_norm": 1.0,
-        "gradient_accumulation_steps": 1,
+        "gradient_accumulation_steps": 4,
         "save_every_n_epochs": 10,
         "early_stopping_patience": 10,
-        "num_workers": 8,
+        "num_workers": 2,
         "pin_memory": true,
-        "prefetch_factor": 4
+        "prefetch_factor": 2
     }
 }

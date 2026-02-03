@@ -68,7 +68,8 @@ def create_loader(config, model_config):
 
 def create_model(config, device):
     model_config = create_model_config(config, device)
-    model = Sound2SheetModel(model_config, freeze_encoder=True)
+    freeze_encoder = config.get("model_config", {}).get("freeze_encoder", True)
+    model = Sound2SheetModel(model_config, freeze_encoder=freeze_encoder)
     return model
 
 def run_train(model, train_loader, val_loader, model_config, training_config):
