@@ -11,10 +11,11 @@ def read_config(config_path):
         config = json.load(f)
     return config
 
-def generate_synthetic_data(total_samples, complexity_distribution, output_dir):
+def generate_synthetic_data(total_samples, complexity_distribution, output_dir, num_workers=0):
     config = DatasetConfig(total_samples=total_samples,
                            complexity_distribution=complexity_distribution, 
-                           output_dir=output_dir)
+                           output_dir=output_dir,
+                           num_workers=num_workers)
     generator = DatasetGenerator(config)
     data = generator.generate()
     return data
@@ -53,7 +54,10 @@ def create_loader(config, model_config):
         early_stopping_patience=config["training"]["early_stopping_patience"],
         num_workers=config["training"].get("num_workers", 4),
         pin_memory=config["training"].get("pin_memory", True),
-        prefetch_factor=config["training"].get("prefetch_factor", 2)
+        prefetch_factor=config["training"].get("prefetch_factor", 2),
+        log_metrics_to_file=config["training"].get("log_metrics_to_file", True),
+        metrics_log_path=config["training"].get("metrics_log_path"),
+        keep_history=config["training"].get("keep_history", True)
     )
 
     # Data configuration
@@ -68,7 +72,8 @@ def create_loader(config, model_config):
 
 def create_model(config, device):
     model_config = create_model_config(config, device)
-    model = Sound2SheetModel(model_config, freeze_encoder=True)
+    freeze_encoder = config.get("model_config", {}).get("freeze_encoder", True)
+    model = Sound2SheetModel(model_config, freeze_encoder=freeze_encoder)
     return model
 
 def run_train(model, train_loader, val_loader, model_config, training_config):
@@ -93,7 +98,8 @@ def run_pipeline():
     generate_synthetic_data(
         total_samples=config["dataset"]["total_samples"],
         complexity_distribution=config["dataset"]["complexity_distribution"],
-        output_dir=config["experiment_name"]
+        output_dir=config["experiment_name"],
+        num_workers=config["dataset"].get("num_workers", 0)
         )
     
     print("STEP 2: Creating dataloaders...")

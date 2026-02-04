@@ -13,6 +13,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 import random
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .midi_generator import MIDIGenerator, MIDIConfig, ComplexityLevel
 from .audio_synthesizer import AudioSynthesizer
@@ -40,6 +41,7 @@ class DatasetConfig:
     # Paths
     output_dir: Path = Path("data/datasets")
     soundfont_path: Optional[Path] = None
+    num_workers: int = 0
     
     def __post_init__(self):
         """Post-initialization validation."""
@@ -183,64 +185,125 @@ class DatasetGenerator:
         total_audio_size = 0
         total_midi_size = 0
         success_count = 0
-        
-        # Add progress bar
-        pbar = tqdm(range(size), desc=f"Generating {split}", unit="sample")
-        
-        for i in pbar:
-            # Determine complexity based on distribution
-            complexity = self._sample_complexity()
-            
-            # Configure MIDI generator
-            midi_config = self._create_midi_config(complexity)
-            self.midi_generator.config = midi_config
-            
-            # Generate MIDI
-            sample_id = f"{split}_{i:05d}"
-            midi_path = midi_dir / f"{sample_id}.mid"
-            
-            self.midi_generator.generate(midi_path)
-            if midi_path.exists():
-                total_midi_size += midi_path.stat().st_size
-            
-            # Synthesize audio if requested
-            audio_path = audio_dir / f"{sample_id}.{self.config.audio_format}"
-            duration = 0.0
-            
-            if generate_audio and self.synthesis_available:
-                try:
-                    audio = self.audio_synthesizer.synthesize(midi_path, audio_path)
-                    duration = len(audio) / self.config.sample_rate
-                    if audio_path.exists():
-                        total_audio_size += audio_path.stat().st_size
-                except Exception as e:
-                    self.logger.error(f"Failed to synthesize {sample_id}: {e}")
+        num_workers = max(0, int(getattr(self.config, "num_workers", 0)))
+
+        if num_workers > 0:
+            futures = []
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                for i in range(size):
+                    futures.append(
+                        executor.submit(
+                            self._generate_single_sample,
+                            split,
+                            i,
+                            dataset_dir,
+                            midi_dir,
+                            audio_dir,
+                            generate_audio
+                        )
+                    )
+                pbar = tqdm(as_completed(futures), total=size, desc=f"Generating {split}", unit="sample")
+                for future in pbar:
+                    result = future.result()
+                    if not result:
+                        continue
+                    sample, midi_size, audio_size = result
+                    self.samples.append(sample)
+                    total_midi_size += midi_size
+                    total_audio_size += audio_size
+                    success_count += 1
+                    pbar.set_postfix({
+                        'complexity': sample.complexity[:3],
+                        'tempo': sample.tempo
+                    })
+                pbar.close()
+        else:
+            pbar = tqdm(range(size), desc=f"Generating {split}", unit="sample")
+            for i in pbar:
+                result = self._generate_single_sample(
+                    split,
+                    i,
+                    dataset_dir,
+                    midi_dir,
+                    audio_dir,
+                    generate_audio
+                )
+                if not result:
                     continue
-            
-            # Create metadata sample
-            sample = DatasetSample(
-                id=sample_id,
-                midi_path=str(midi_path.relative_to(dataset_dir)),
-                audio_path=str(audio_path.relative_to(dataset_dir)) if generate_audio else "",
-                complexity=complexity.value,
-                tempo=midi_config.tempo,
-                time_signature=f"{midi_config.time_signature.value[0]}/{midi_config.time_signature.value[1]}",
-                key_signature=midi_config.key_signature.name,
-                num_measures=midi_config.num_measures,
-                duration=duration,
-                split=split
-            )
-            
-            self.samples.append(sample)
-            success_count += 1
-            
-            # Update progress bar with current stats
-            pbar.set_postfix({
-                'complexity': complexity.value[:3],
-                'tempo': midi_config.tempo
-            })
-        
-        pbar.close()
+                sample, midi_size, audio_size = result
+                self.samples.append(sample)
+                total_midi_size += midi_size
+                total_audio_size += audio_size
+                success_count += 1
+                pbar.set_postfix({
+                    'complexity': sample.complexity[:3],
+                    'tempo': sample.tempo
+                })
+            pbar.close()
+
+        self.logger.info(
+            f"{split} split: generated {success_count}/{size} samples "
+            f"(midi {total_midi_size / (1024 * 1024):.2f} MB, "
+            f"audio {total_audio_size / (1024 * 1024):.2f} MB)"
+        )
+
+    def _generate_single_sample(
+        self,
+        split: str,
+        index: int,
+        dataset_dir: Path,
+        midi_dir: Path,
+        audio_dir: Path,
+        generate_audio: bool
+    ) -> Optional[Tuple[DatasetSample, int, int]]:
+        """Generate a single sample and return metadata plus file sizes."""
+        complexity = self._sample_complexity()
+        midi_config = self._create_midi_config(complexity)
+
+        midi_generator = MIDIGenerator(midi_config)
+
+        sample_id = f"{split}_{index:05d}"
+        midi_path = midi_dir / f"{sample_id}.mid"
+        audio_path = audio_dir / f"{sample_id}.{self.config.audio_format}"
+
+        try:
+            midi_generator.generate(midi_path)
+        except Exception as exc:
+            self.logger.error(f"Failed to generate MIDI {sample_id}: {exc}")
+            return None
+
+        midi_size = midi_path.stat().st_size if midi_path.exists() else 0
+        duration = 0.0
+        audio_size = 0
+
+        if generate_audio and self.synthesis_available:
+            try:
+                synthesizer = AudioSynthesizer(
+                    soundfont_path=self.config.soundfont_path,
+                    sample_rate=self.config.sample_rate
+                )
+                audio = synthesizer.synthesize(midi_path, audio_path)
+                duration = len(audio) / self.config.sample_rate
+                if audio_path.exists():
+                    audio_size = audio_path.stat().st_size
+            except Exception as exc:
+                self.logger.error(f"Failed to synthesize {sample_id}: {exc}")
+                return None
+
+        sample = DatasetSample(
+            id=sample_id,
+            midi_path=str(midi_path.relative_to(dataset_dir)),
+            audio_path=str(audio_path.relative_to(dataset_dir)) if generate_audio else "",
+            complexity=complexity.value,
+            tempo=midi_config.tempo,
+            time_signature=f"{midi_config.time_signature.value[0]}/{midi_config.time_signature.value[1]}",
+            key_signature=midi_config.key_signature.name,
+            num_measures=midi_config.num_measures,
+            duration=duration,
+            split=split
+        )
+
+        return sample, midi_size, audio_size
     
     def _sample_complexity(self) -> ComplexityLevel:
         """Sample complexity level based on distribution."""

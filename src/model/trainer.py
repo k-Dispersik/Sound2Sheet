@@ -94,6 +94,9 @@ class Trainer:
         self.val_losses = []
         self.val_accuracies = []
         self.learning_rates = []
+        self.metrics_log_path = None
+        if self.config.log_metrics_to_file:
+            self.metrics_log_path = self.config.metrics_log_path or (self.config.log_dir / "metrics.jsonl")
         
         # Resume from checkpoint if provided
         if resume_from:
@@ -138,19 +141,25 @@ class Trainer:
             
             # Train
             train_loss, train_acc = self._train_epoch(current_lr)
-            self.train_losses.append(train_loss)
-            self.train_accuracies.append(train_acc)
+            if self.config.keep_history:
+                self.train_losses.append(train_loss)
+                self.train_accuracies.append(train_acc)
             
             # Validate
             val_loss, val_metrics = self._validate_epoch()
-            self.val_losses.append(val_loss)
-            self.val_accuracies.append(val_metrics['accuracy'])
+            if self.config.keep_history:
+                self.val_losses.append(val_loss)
+                self.val_accuracies.append(val_metrics['accuracy'])
             
             # Learning rate
-            self.learning_rates.append(current_lr)
+            if self.config.keep_history:
+                self.learning_rates.append(current_lr)
             
             # Checkpointing
             self._handle_checkpointing(epoch, val_loss)
+
+            # Log metrics to file for long runs
+            self._log_epoch_metrics(epoch, current_lr, train_loss, train_acc, val_loss, val_metrics)
             
             # Early stopping
             if self._should_stop_early():
@@ -189,26 +198,17 @@ class Trainer:
         self.model.train()
         total_loss = 0.0
         num_batches = 0
-        all_predictions = []
-        all_targets = []
+        metrics = self._init_metric_accumulator()
         
         progress_bar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")
         for batch_idx, batch in enumerate(progress_bar):
             loss, predictions, targets = self._process_train_batch(batch)
             total_loss += loss * self.config.gradient_accumulation_steps
             num_batches += 1
-            all_predictions.append(predictions)
-            all_targets.append(targets)
+            self._update_metric_accumulator(metrics, predictions, targets)
             
             # Compute running accuracy
-            if len(all_predictions) > 0:
-                temp_preds = torch.cat(all_predictions, dim=0)
-                temp_targets = torch.cat(all_targets, dim=0)
-                correct = (temp_preds.reshape(-1) == temp_targets.reshape(-1)).sum().item()
-                total = temp_preds.numel()
-                running_acc = correct / total if total > 0 else 0.0
-            else:
-                running_acc = 0.0
+            running_acc = self._accuracy_from_metrics(metrics)
             
             avg_loss_so_far = total_loss / num_batches
             progress_bar.set_postfix({
@@ -223,13 +223,7 @@ class Trainer:
         avg_loss = total_loss / num_batches
         
         # Compute final training accuracy
-        all_predictions = torch.cat(all_predictions, dim=0)
-        all_targets = torch.cat(all_targets, dim=0)
-        predictions_flat = all_predictions.reshape(-1)
-        targets_flat = all_targets.reshape(-1)
-        correct = (predictions_flat == targets_flat).sum().item()
-        total = predictions_flat.numel()
-        train_accuracy = correct / total if total > 0 else 0.0
+        train_accuracy = self._accuracy_from_metrics(metrics)
         
         return avg_loss, train_accuracy
 
@@ -300,8 +294,7 @@ class Trainer:
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
-        all_predictions = []
-        all_targets = []
+        metrics = self._init_metric_accumulator()
         
         progress_bar = tqdm(self.val_loader, desc="Validation")
         with torch.no_grad():
@@ -309,18 +302,10 @@ class Trainer:
                 loss, predictions, targets = self._process_val_batch(batch)
                 total_loss += loss
                 num_batches += 1
-                all_predictions.append(predictions)
-                all_targets.append(targets)
+                self._update_metric_accumulator(metrics, predictions, targets)
                 
                 # Compute running accuracy
-                if len(all_predictions) > 0:
-                    temp_preds = torch.cat(all_predictions, dim=0)
-                    temp_targets = torch.cat(all_targets, dim=0)
-                    correct = (temp_preds.reshape(-1) == temp_targets.reshape(-1)).sum().item()
-                    total = temp_preds.numel()
-                    running_acc = correct / total if total > 0 else 0.0
-                else:
-                    running_acc = 0.0
+                running_acc = self._accuracy_from_metrics(metrics)
                 
                 avg_loss_so_far = total_loss / num_batches
                 progress_bar.set_postfix({
@@ -332,8 +317,8 @@ class Trainer:
             return 0.0, {'accuracy': 0.0, 'f1': 0.0, 'precision': 0.0, 'recall': 0.0}
         
         avg_loss = total_loss / num_batches
-        metrics = self._compute_metrics(all_predictions, all_targets, avg_loss)
-        return avg_loss, metrics
+        metric_values = self._compute_metrics(metrics, avg_loss)
+        return avg_loss, metric_values
 
     def _process_val_batch(self, batch):
         """Process a single validation batch and return loss, predictions, targets."""
@@ -346,17 +331,14 @@ class Trainer:
         targets = piano_roll_resized
         return loss, predictions, targets
 
-    def _compute_metrics(self, all_predictions, all_targets, avg_loss):
-        """Compute frame-level metrics from predictions and targets."""
-        all_predictions = torch.cat(all_predictions, dim=0)
-        all_targets = torch.cat(all_targets, dim=0)
-        predictions_flat = all_predictions.reshape(-1)
-        targets_flat = all_targets.reshape(-1)
-        true_positives = ((predictions_flat == 1) & (targets_flat == 1)).sum().item()
-        false_positives = ((predictions_flat == 1) & (targets_flat == 0)).sum().item()
-        false_negatives = ((predictions_flat == 0) & (targets_flat == 1)).sum().item()
-        true_negatives = ((predictions_flat == 0) & (targets_flat == 0)).sum().item()
-        accuracy = (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
+    def _compute_metrics(self, metrics, avg_loss):
+        """Compute frame-level metrics from accumulated counts."""
+        total = metrics['total']
+        true_positives = metrics['tp']
+        false_positives = metrics['fp']
+        false_negatives = metrics['fn']
+        true_negatives = metrics['tn']
+        accuracy = (true_positives + true_negatives) / total if total > 0 else 0.0
         precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
         recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
@@ -367,6 +349,27 @@ class Trainer:
             'f1': f1,
             'loss': avg_loss
         }
+
+    def _init_metric_accumulator(self) -> Dict[str, int]:
+        """Initialize metric accumulator to avoid storing all predictions in memory."""
+        return {'tp': 0, 'fp': 0, 'fn': 0, 'tn': 0, 'total': 0}
+
+    def _update_metric_accumulator(self, metrics: Dict[str, int], predictions: torch.Tensor, targets: torch.Tensor) -> None:
+        """Update metric accumulator counts for a batch."""
+        predictions_flat = predictions.reshape(-1)
+        targets_flat = targets.reshape(-1)
+        metrics['tp'] += ((predictions_flat == 1) & (targets_flat == 1)).sum().item()
+        metrics['fp'] += ((predictions_flat == 1) & (targets_flat == 0)).sum().item()
+        metrics['fn'] += ((predictions_flat == 0) & (targets_flat == 1)).sum().item()
+        metrics['tn'] += ((predictions_flat == 0) & (targets_flat == 0)).sum().item()
+        metrics['total'] += predictions_flat.numel()
+
+    def _accuracy_from_metrics(self, metrics: Dict[str, int]) -> float:
+        """Compute accuracy from accumulated metrics."""
+        total = metrics['total']
+        if total == 0:
+            return 0.0
+        return (metrics['tp'] + metrics['tn']) / total
     
     def _save_checkpoint(self, filename: str):
         """Save training checkpoint and remove old ones if exceeding limit."""
@@ -420,3 +423,31 @@ class Trainer:
         history_path = self.config.log_dir / "training_history.json"
         with open(history_path, 'w') as f:
             json.dump(history, f, indent=2)
+
+    def _log_epoch_metrics(
+        self,
+        epoch: int,
+        current_lr: float,
+        train_loss: float,
+        train_acc: float,
+        val_loss: float,
+        val_metrics: Dict[str, float]
+    ) -> None:
+        """Append epoch metrics to a JSONL log for long training runs."""
+        if not self.metrics_log_path:
+            return
+        record = {
+            "epoch": epoch + 1,
+            "global_step": self.global_step,
+            "learning_rate": current_lr,
+            "train_loss": train_loss,
+            "train_accuracy": train_acc,
+            "val_loss": val_loss,
+            "val_accuracy": val_metrics.get("accuracy", 0.0),
+            "val_precision": val_metrics.get("precision", 0.0),
+            "val_recall": val_metrics.get("recall", 0.0),
+            "val_f1": val_metrics.get("f1", 0.0),
+            "timestamp": datetime.now().isoformat()
+        }
+        with open(self.metrics_log_path, "a") as handle:
+            handle.write(json.dumps(record) + "\n")
