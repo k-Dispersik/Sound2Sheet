@@ -11,15 +11,7 @@ import logging
 import subprocess
 import numpy as np
 import soundfile as sf
-import os
-import contextlib
-
-try:
-    from midi2audio import FluidSynth
-    MIDI2AUDIO_AVAILABLE = True
-except ImportError:
-    MIDI2AUDIO_AVAILABLE = False
-    FluidSynth = None
+import shutil
 
 
 class AudioSynthesizer:
@@ -45,13 +37,16 @@ class AudioSynthesizer:
             gain: Overall gain/volume (0.0-1.0)
             
         Raises:
-            ImportError: If midi2audio is not installed
+            RuntimeError: If FluidSynth is not installed on the system
             FileNotFoundError: If soundfont file not found
         """
-        if not MIDI2AUDIO_AVAILABLE:
-            raise ImportError(
-                "midi2audio is required but not installed. Install it with:\n"
-                "  pip install midi2audio"
+        # Check if fluidsynth is available on the system
+        if not shutil.which('fluidsynth'):
+            raise RuntimeError(
+                "FluidSynth is not installed on the system. Install it with:\n"
+                "  Ubuntu/Debian: sudo apt-get install fluidsynth\n"
+                "  macOS: brew install fluid-synth\n"
+                "  Fedora: sudo dnf install fluidsynth"
             )
         
         self.sample_rate = sample_rate
@@ -83,10 +78,6 @@ class AudioSynthesizer:
             self.logger.addHandler(handler)
             # Keep synthesizer quieter by default
             self.logger.setLevel(logging.WARNING)
-        
-        # Avoid initializing midi2audio FluidSynth (it may print to stdout/stderr).
-        # We'll call the system 'fluidsynth' via subprocess in synthesize().
-        self.fs = None
     
     def synthesize(
         self,
