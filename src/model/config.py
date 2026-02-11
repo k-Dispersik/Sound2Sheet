@@ -82,6 +82,9 @@ class TrainingConfig:
     logging_steps: int = 100
     eval_steps: int = 500
     log_dir: Path = Path("logs")
+    log_metrics_to_file: bool = True
+    metrics_log_path: Optional[Path] = None
+    keep_history: bool = True
     
     # Early stopping
     early_stopping_patience: int = 5
@@ -120,10 +123,14 @@ class TrainingConfig:
             self.checkpoint_dir = Path(self.checkpoint_dir)
         if isinstance(self.log_dir, str):
             self.log_dir = Path(self.log_dir)
+        if isinstance(self.metrics_log_path, str):
+            self.metrics_log_path = Path(self.metrics_log_path)
         
         # Create directories if they don't exist
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        if self.metrics_log_path:
+            self.metrics_log_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -213,4 +220,3 @@ class DataConfig:
         # Create cache directory if needed
         if self.use_cache:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-

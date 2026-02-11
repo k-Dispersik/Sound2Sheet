@@ -94,6 +94,9 @@ class Trainer:
         self.val_losses = []
         self.val_accuracies = []
         self.learning_rates = []
+        self.metrics_log_path = None
+        if self.config.log_metrics_to_file:
+            self.metrics_log_path = self.config.metrics_log_path or (self.config.log_dir / "metrics.jsonl")
         
         # Resume from checkpoint if provided
         if resume_from:
@@ -138,19 +141,25 @@ class Trainer:
             
             # Train
             train_loss, train_acc = self._train_epoch(current_lr)
-            self.train_losses.append(train_loss)
-            self.train_accuracies.append(train_acc)
+            if self.config.keep_history:
+                self.train_losses.append(train_loss)
+                self.train_accuracies.append(train_acc)
             
             # Validate
             val_loss, val_metrics = self._validate_epoch()
-            self.val_losses.append(val_loss)
-            self.val_accuracies.append(val_metrics['accuracy'])
+            if self.config.keep_history:
+                self.val_losses.append(val_loss)
+                self.val_accuracies.append(val_metrics['accuracy'])
             
             # Learning rate
-            self.learning_rates.append(current_lr)
+            if self.config.keep_history:
+                self.learning_rates.append(current_lr)
             
             # Checkpointing
             self._handle_checkpointing(epoch, val_loss)
+
+            # Log metrics to file for long runs
+            self._log_epoch_metrics(epoch, current_lr, train_loss, train_acc, val_loss, val_metrics)
             
             # Early stopping
             if self._should_stop_early():
@@ -414,3 +423,31 @@ class Trainer:
         history_path = self.config.log_dir / "training_history.json"
         with open(history_path, 'w') as f:
             json.dump(history, f, indent=2)
+
+    def _log_epoch_metrics(
+        self,
+        epoch: int,
+        current_lr: float,
+        train_loss: float,
+        train_acc: float,
+        val_loss: float,
+        val_metrics: Dict[str, float]
+    ) -> None:
+        """Append epoch metrics to a JSONL log for long training runs."""
+        if not self.metrics_log_path:
+            return
+        record = {
+            "epoch": epoch + 1,
+            "global_step": self.global_step,
+            "learning_rate": current_lr,
+            "train_loss": train_loss,
+            "train_accuracy": train_acc,
+            "val_loss": val_loss,
+            "val_accuracy": val_metrics.get("accuracy", 0.0),
+            "val_precision": val_metrics.get("precision", 0.0),
+            "val_recall": val_metrics.get("recall", 0.0),
+            "val_f1": val_metrics.get("f1", 0.0),
+            "timestamp": datetime.now().isoformat()
+        }
+        with open(self.metrics_log_path, "a") as handle:
+            handle.write(json.dumps(record) + "\n")

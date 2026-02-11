@@ -6,7 +6,8 @@
             "beginner": 0.5,
             "intermediate": 0.4,
             "advanced": 0.1
-        }
+        },
+        "num_workers": 4
     },
     "model_config": {
         "num_piano_keys": 88,
@@ -42,6 +43,9 @@
         "early_stopping_patience": 10,
         "num_workers": 2,
         "pin_memory": true,
+        "prefetch_factor": 2,
+        "log_metrics_to_file": true,
+        "keep_history": false
         "prefetch_factor": 2
     }
 }
