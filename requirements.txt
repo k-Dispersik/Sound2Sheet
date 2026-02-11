@@ -21,6 +21,7 @@ seaborn>=0.12.0  # Enhanced statistical visualizations
 # MIDI and Music
 midiutil>=1.2.1  # MIDI file generation
 mido>=1.3.0  # MIDI file reading and manipulation
+fluidsynth>=0.2  # Audio synthesis from MIDI (requires system FluidSynth)
 
 # Development and Testing
 pytest>=7.4.0  # Test framework
@@ -30,5 +31,4 @@ pytest-timeout>=2.1.0  # Test timeout handling
 
 # Optional Dependencies (commented out - install if needed)
 # accelerate>=0.20.0  # Mixed precision and distributed training for PyTorch
-# fluidsynth>=0.2  # Audio synthesis from MIDI (requires system FluidSynth)
 # midi2audio>=0.1.1  # Alternative MIDI to audio conversion
